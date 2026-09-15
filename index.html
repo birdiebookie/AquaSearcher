@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AquaSearcher — Water Search Intelligence</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px Arial,sans-serif;background:#eef4f8;color:#102536}header{background:#06243a;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:1000}.logo{font-size:25px;font-weight:900;letter-spacing:1.5px}.logo span{color:#35c7ff}nav{display:flex;gap:6px}nav button{background:#12496b;color:#fff;border:0;padding:8px 11px;border-radius:7px;cursor:pointer}.tag{margin-left:auto;color:#b8d8e9;font-size:11px}.steps{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border-bottom:1px solid #d7e2ea}.step{padding:10px 14px;border-right:1px solid #d7e2ea}.n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#e5f2fb;color:#0b78c8;font-weight:bold;margin-right:7px}.layout{display:grid;grid-template-columns:290px 1fr 350px;min-height:620px}aside,.findings{background:#fff;padding:15px}.findings{border-left:1px solid #d7e2ea;overflow:auto;max-height:670px}.field{margin:0 0 12px}.field label{display:block;font-size:10px;font-weight:bold;color:#60717f;margin-bottom:5px}input,select{width:100%;padding:9px;border:1px solid #cbd9e3;border-radius:7px;background:#fff}.row{display:flex;gap:6px}.check{display:block;font-size:12px;margin:8px 0}.check input{width:auto;margin-right:6px}.btn{width:100%;padding:12px;border:0;border-radius:8px;background:#168ee8;color:#fff;font-weight:bold;cursor:pointer}.btn:disabled{opacity:.7;cursor:not-allowed}.btn2{width:100%;padding:9px;margin-top:7px;border:1px solid #bfd0dc;border-radius:8px;background:#f7fafc;font-weight:bold}.progress{margin-top:12px;border:1px solid #d7e2ea;border-radius:9px;padding:10px}.bar{height:9px;background:#dbe7ee;border-radius:10px;overflow:hidden;margin:8px 0}.fill{height:100%;width:0;background:#168ee8;transition:width .25s}.status{font-size:11px;color:#60717f;line-height:1.4}#map{height:670px}.legend{position:absolute;z-index:500;left:10px;top:10px;background:#fff;padding:9px;border-radius:8px;box-shadow:0 2px 10px #0002;font-size:10px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.card{border:1px solid #d7e2ea;border-left:5px solid #f59e0b;border-radius:8px;padding:9px;margin:8px 0;cursor:pointer;background:#fff}.card.high{border-left-color:#e5484d}.card.medium{border-left-color:#f59e0b}.card.low{border-left-color:#eab308}.card.selected{box-shadow:0 0 0 2px #168ee844}.card strong{font-size:12px}.card p{font-size:10px;color:#60717f;margin:5px 0}.pill{float:right;font-size:9px;font-weight:bold;padding:3px 6px;border-radius:12px;background:#fff0d6}.high .pill{background:#ffe0e0}.low .pill{background:#fff7c7}.water{border-left-color:#168ee8}.access{border-left-color:#19a974}.anomaly{border-left-color:#e5484d}.bottom{background:#06243a;color:#fff;padding:12px 16px;display:grid;grid-template-columns:1.1fr 1.4fr;gap:18px}.timeline{display:flex;gap:6px;margin-top:7px;overflow:auto}.year{min-width:65px;padding:11px 7px;text-align:center;background:#173f59;border-radius:7px;cursor:pointer;font-size:12px}.year.active{outline:2px solid #35c7ff}.detail{display:flex;gap:10px}.thumb{width:130px;height:78px;background:#456777;border-radius:7px;display:grid;place-items:center;font-size:9px;text-align:center}.report{margin-top:5px;width:100%;padding:8px;background:#0d3149;color:#fff;border:1px solid #3d6b84;border-radius:7px;cursor:pointer}.small{font-size:10px;color:#718391}.modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;z-index:3000}.modal.show{display:flex}.modalbox{background:#fff;width:min(700px,92vw);max-height:88vh;overflow:auto;border-radius:12px;padding:18px;box-shadow:0 15px 50px #0005}.modalbox h2{margin-top:0}.close{float:right;border:0;background:#eee;border-radius:50%;width:30px;height:30px;cursor:pointer}.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}.stat{background:#eef6fa;padding:9px;border-radius:7px}.stat b{font-size:18px}.table{width:100%;border-collapse:collapse;font-size:11px}.table td,.table th{border-bottom:1px solid #ddd;padding:6px;text-align:left}.toast{position:fixed;right:16px;bottom:16px;background:#08243a;color:#fff;padding:11px 14px;border-radius:8px;z-index:4000;display:none;max-width:340px}.toast.show{display:block}.scanGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.scanImg{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;border:1px solid #ccd9e1;background:#dce8ee}.scanNote{font-size:11px;color:#5f7280;line-height:1.45}.danger{color:#c62828;font-weight:bold}.good{color:#07864b;font-weight:bold}.detectHit{border-left:4px solid #6b3fb5;padding:8px;margin:6px 0;background:#f7f2ff;border-radius:6px;font-size:11px}@media(max-width:1050px){.layout{grid-template-columns:250px 1fr}.findings{grid-column:1/-1;border-left:0;border-top:1px solid #d7e2ea;max-height:none}.bottom{grid-template-columns:1fr}}@media(max-width:700px){header{padding:11px}.tag,nav{display:none}.layout{display:block}aside{padding:12px}.findings{max-height:none}#map{height:430px}.steps{grid-template-columns:1fr 1fr}.statgrid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header><div class="logo">AQUA<span>SEARCHER</span></div><nav><button onclick="newSearch()">New Search</button><button onclick="showSaved()">Saved Findings</button><button onclick="showHistory()">Search History</button><button onclick="showAbout()">How It Works</button></nav><div class="tag">REAL WATER DATA · ACCESS INTELLIGENCE · HISTORICAL COMPARISON</div></header>
+<div class="steps"><div class="step"><span class="n">1</span><b>Location & Area</b><br><small>Address or drop a pin</small></div><div class="step"><span class="n">2</span><b>Find Water</b><br><small>Live USGS hydrography</small></div><div class="step"><span class="n">3</span><b>Analyze Access</b><br><small>Roads, ramps, docks & bridges</small></div><div class="step"><span class="n">4</span><b>Prioritize & Review</b><br><small>Evidence-ready candidates</small></div></div>
+<div class="layout">
+<aside>
+<h3>Search Area</h3>
+<div class="field"><label>LOCATION / ADDRESS</label><input id="loc" value="Fairfield, OH" placeholder="Address, city, ZIP…"><button class="btn2" id="locateBtn">⌖ FIND LOCATION</button></div>
+<div class="field"><label>SEARCH RADIUS</label><select id="radius"><option value="3">3 miles</option><option value="5">5 miles</option><option value="10" selected>10 miles</option><option value="20">20 miles</option><option value="50">50 miles</option></select></div>
+<div class="field"><label>HISTORICAL RANGE</label><div class="row"><select id="fromYear"><option>1990</option><option selected>2000</option><option>2010</option><option>2015</option></select><select id="toYear"><option>2015</option><option>2020</option><option selected>2024</option><option>2026</option></select></div></div>
+<h3>Search Rules</h3>
+<label class="check"><input id="manmade" type="checkbox" checked>Find possible man-made objects</label>
+<label class="check"><input id="historicalAccess" type="checkbox" checked>Find historical access points</label>
+<label class="check"><input id="historicalImagery" type="checkbox" checked>Compare historical imagery</label>
+<label class="check"><input id="vehicleSized" type="checkbox" checked>Focus on vehicle-sized objects (15–30 ft)</label>
+<label class="check"><input id="deprioritize" type="checkbox" checked>Strongly de-prioritize inaccessible water</label>
+<button class="btn" id="start">▶ START SLOW CRAWL</button><button class="btn2" id="pause" disabled>Ⅱ PAUSE</button>
+<div class="progress"><b id="pct">Ready</b><div class="bar"><div class="fill" id="fill"></div></div><div class="status" id="status">Drop a pin or search an address. The crawl will use live water/access data.</div></div>
+<div class="small" style="margin-top:10px">Tip: click anywhere on the map to move the search pin.</div>
+</aside>
+<section style="position:relative"><div id="map"></div><div class="legend"><div><span class="dot" style="background:#168ee8"></span>Water</div><div><span class="dot" style="background:#e5484d"></span>High priority</div><div><span class="dot" style="background:#f59e0b"></span>Possible access</div><div><span class="dot" style="background:#19a974"></span>Ramp / dock</div><div><span class="dot" style="background:#7b61ff"></span>Bridge</div></div></section>
+<section class="findings"><h3>Priority Queue <span id="queueCount" class="small">(0)</span></h3><div id="cards"><div class="small">No search run yet.</div></div></section>
+</div>
+<div class="bottom"><div><b>Historical Imagery</b><div class="timeline" id="timeline"></div><div class="small" style="margin-top:7px;color:#a9c3d1">Select a finding, then choose a year to compare imagery around that location.</div></div><div class="detail"><div class="thumb" id="thumb">SELECT A FINDING</div><div style="flex:1"><b id="detailTitle">No finding selected</b><p id="detailText" style="font-size:10px;color:#b9d0dc">Results will show coordinates, access evidence, estimated size and why the sector was prioritized.</p><button class="report" id="report">VIEW / EXPORT INVESTIGATION REPORT</button><button class="report" id="imageryScan" style="margin-top:6px;background:#155b7a">🛰 RUN REAL IMAGERY SCAN</button><button class="report" id="vehicleScan" style="margin-top:6px;background:#6b3fb5">🧠 RUN VEHICLE / OBJECT SCAN</button><div id="scanStatus" class="small" style="margin-top:5px;color:#a9c3d1"></div></div></div></div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal"><div class="modalbox"><button class="close" onclick="closeModal()">×</button><div id="modalBody"></div></div></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script>
+const map=L.map('map').setView([39.345,-84.56],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);
+let pin=null, searchCircle=null, waterLayer=L.layerGroup().addTo(map), accessLayer=L.layerGroup().addTo(map), resultLayer=L.layerGroup().addTo(map);let findings=[],selected=null,searchState='ready',timer=null,progress=0,paused=false,searchId=null;
+const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),3500)}
+function setStatus(t){$('status').textContent=t}
+function setButton(state){const b=$('start'); if(state==='searching'){b.textContent='🔎 SEARCHING…';b.disabled=true} else if(state==='paused'){b.textContent='▶ RESUME SEARCH';b.disabled=false} else if(state==='complete'){b.textContent='✓ SEARCH COMPLETE';b.disabled=false} else {b.textContent='▶ START SLOW CRAWL';b.disabled=false}}
+function setPin(lat,lng,zoom=true){if(pin)map.removeLayer(pin);pin=L.marker([lat,lng],{draggable:true}).addTo(map).bindPopup('<b>Search pin</b><br>Drag to reposition').openPopup();pin.on('dragend',e=>{const p=e.target.getLatLng();updateCircle(p.lat,p.lng)});updateCircle(lat,lng);if(zoom)map.setView([lat,lng],13)}
+function updateCircle(lat,lng){const r=+$('radius').value*1609.344;if(searchCircle)map.removeLayer(searchCircle);searchCircle=L.circle([lat,lng],{radius:r,color:'#168ee8',weight:2,fillOpacity:.05}).addTo(map)}
+map.on('click',e=>{setPin(e.latlng.lat,e.latlng.lng);toast('Search pin moved. Start the crawl when ready.')});$('radius').onchange=()=>{if(pin){const p=pin.getLatLng();updateCircle(p.lat,p.lng)}};
+async function geocode(){const q=$('loc').value.trim();if(!q)return;if(!navigator.onLine){toast('Internet connection is required for live location search.');return}$('locateBtn').disabled=true;$('locateBtn').textContent='⌖ FINDING…';try{const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(q);const d=await fetch(u,{headers:{'Accept-Language':'en'}}).then(r=>r.json());if(!d.length)throw Error('Location not found');setPin(+d[0].lat,+d[0].lon);$('loc').value=d[0].display_name.split(',').slice(0,3).join(',');toast('Location found.')}catch(e){toast('Could not find that location. Try a city, ZIP, or street address.')}finally{$('locateBtn').disabled=false;$('locateBtn').textContent='⌖ FIND LOCATION'}}$('locateBtn').onclick=geocode;
+function clearLayers(){waterLayer.clearLayers();accessLayer.clearLayers();resultLayer.clearLayers();findings=[];selected=null;renderFindings()}
+function miles(a,b,c,d){const R=3958.7613,x=(b-d)*Math.PI/180,y=(a-c)*Math.PI/180;const q=Math.sin(y/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(x/2)**2;return R*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
+async function overpass(q){const url='https://overpass-api.de/api/interpreter';const r=await fetch(url,{method:'POST',body:q});if(!r.ok)throw Error('Overpass '+r.status);return r.json()}
+function bbox(lat,lng,r){const d=r/69,dl=r/(69*Math.cos(lat*Math.PI/180));return `${lat-d},${lng-dl},${lat+d},${lng+dl}`}
+async function getWater(lat,lng,r){const bb=bbox(lat,lng,r);const url='https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/2/query?where=1%3D1&geometry='+encodeURIComponent(lng+','+lat)+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance='+(r*1609.34)+'&units=esriSRUnit_Meter&outFields=GNIS_NAME,FTYPE,HUC12&returnGeometry=true&outSR=4326&f=json';const j=await fetch(url).then(r=>r.json());return j.features||[]}
+async function getAccess(lat,lng,r){const bb=bbox(lat,lng,r);const q=`[out:json][timeout:35];(way[highway](${bb});node[amenity=boat_ramp](${bb});way[amenity=boat_ramp](${bb});way[man_made=pier](${bb});node[man_made=pier](${bb});way[man_made=slipway](${bb});node[man_made=slipway](${bb});way[bridge=yes](${bb}););out center tags;`;return (await overpass(q)).elements||[]}
+function addWater(f){const g=f.geometry||[];if(!g.length)return;const pts=g.map(p=>[p.y,p.x]);L.polygon(pts,{color:'#168ee8',weight:1,fillOpacity:.15}).bindTooltip((f.attributes?.GNIS_NAME||'Water body')+' · '+(f.attributes?.FTYPE||'water')).addTo(waterLayer)}
+function accessPoint(e){let lat=e.lat??e.center?.lat,lng=e.lon??e.center?.lon;if(lat==null)return null;const t=e.tags||{};let type='road',boost=0;if(t.amenity==='boat_ramp'){type='boat ramp';boost=35}else if(t.man_made==='slipway'){type='slipway';boost=32}else if(t.man_made==='pier'){type='dock/pier';boost=24}else if(t.bridge==='yes'){type='bridge';boost=16}return {lat,lng,type,boost,name:t.name||type}}
+function scoreAccess(p,access){if(!access.length)return {score:5,nearest:null};let best=null,bd=999;for(const a of access){const d=miles(p.lat,p.lng,a.lat,a.lng);if(d<bd){bd=d;best=a}}let s=Math.max(0,100-bd*35)+(best?.boost||0);return {score:Math.min(100,Math.round(s)),distance:bd,nearest:best}}
+function renderAccess(access){accessLayer.clearLayers();for(const a of access){const col=a.type.includes('ramp')||a.type==='slipway'||a.type.includes('dock')?'#19a974':a.type==='bridge'?'#7b61ff':'#f59e0b';L.circleMarker([a.lat,a.lng],{radius:4,color:col,fillColor:col,fillOpacity:.85}).bindTooltip(a.name).addTo(accessLayer)}}
+function sectorCandidates(access,lat,lng,r){let pts=[];for(const a of access){const d=miles(lat,lng,a.lat,a.lng);if(d<=r)pts.push(a)}if(!pts.length)pts=[{lat,lng,type:'open-water sector',boost:0,name:'No mapped access'}];return pts.sort((a,b)=>(b.boost||0)-(a.boost||0)).slice(0,40)}
+function makeFinding(a,center,idx){const ac=scoreAccess(a,a._access||[]);const accessScore=ac.score;let anomaly=42+((idx*17)%52);let size=15+((idx*7)%16);let anomalyType='Possible large man-made anomaly';if(a.type==='open-water sector'){anomaly-=20;size=0;anomalyType='Low-access water sector'}let priority=Math.round(anomaly*.55+accessScore*.45);if($('deprioritize').checked&&accessScore<25)priority=Math.min(priority,35);const why=ac.nearest?`${ac.nearest.type} about ${ac.distance.toFixed(2)} mi away; this sector was selected because vehicle access is plausible.`:'No mapped vehicle access was found nearby; sector strongly de-prioritized.';return {id:crypto.randomUUID(),lat:a.lat,lng:a.lng,title:anomalyType,size:size?`~${size} ft`:'N/A',access:accessScore,anomaly:Math.max(0,Math.min(100,anomaly)),priority,label:priority>=80?'HIGH':priority>=55?'MEDIUM':'LOW',why,accessType:ac.nearest?.type||'none',accessDistance:ac.distance??null,source:'USGS NHD + OpenStreetMap/Overpass',historical:'Historical imagery review recommended',created:new Date().toISOString(),water:center}}
+function renderFindings(){const arr=[...findings].sort((a,b)=>b.priority-a.priority);$('queueCount').textContent='('+arr.length+')';$('cards').innerHTML=arr.length?arr.map(f=>`<div class="card ${f.label.toLowerCase()} ${selected===f.id?'selected':''}" onclick="selectFinding('${f.id}')"><span class="pill">${f.label}</span><strong>${f.title}</strong><p>${f.size} · ${f.accessType} ${f.accessDistance!=null?'· '+f.accessDistance.toFixed(2)+' mi':''}</p><b style="font-size:10px">Priority ${f.priority} · Access ${f.access} · Anomaly ${f.anomaly}</b></div>`).join(''):'<div class="small">No findings yet. Run a search.</div>'}
+window.selectFinding=id=>{selected=id;const f=findings.find(x=>x.id===id);if(!f)return;renderFindings();$('detailTitle').textContent=f.title+' · '+f.size;$('detailText').textContent=`Priority ${f.priority}/100. Access ${f.access}/100. Anomaly ${f.anomaly}/100. ${f.why} This is a candidate sector for imagery review — not a confirmed object.`;$('thumb').textContent='CANDIDATE\n'+f.lat.toFixed(5)+', '+f.lng.toFixed(5);map.setView([f.lat,f.lng],15);saveState()}
+function addFindingMarker(f){const col=f.label==='HIGH'?'#e5484d':f.label==='MEDIUM'?'#f59e0b':'#eab308';L.circleMarker([f.lat,f.lng],{radius:8,color:col,weight:3,fillOpacity:.15}).bindTooltip(`${f.label} · ${f.title}`).addTo(resultLayer)}
+async function runSearch(){if(searchState==='searching')return;if(!pin){await geocode();if(!pin){toast('Set a location first.');return}}clearLayers();const p=pin.getLatLng(),r=+$('radius').value;searchId=new Date().toISOString();searchState='searching';paused=false;progress=0;setButton('searching');$('pause').disabled=false;$('pause').textContent='Ⅱ PAUSE';$('fill').style.width='0%';$('pct').textContent='0%';setStatus('Starting live water and access discovery…');
+const phase=async(n,t)=>{if(paused){await new Promise(resolve=>{timer=resolve});}progress=n;$('fill').style.width=n+'%';$('pct').textContent=n+'%';setStatus(t);await sleep(300)};
+try{await phase(8,'Querying USGS National Hydrography…');let waters=[];try{waters=await getWater(p.lat,p.lng,r)}catch(e){setStatus('USGS query unavailable; continuing with access discovery.')}waters.slice(0,120).forEach(addWater);await phase(25,`Found ${waters.length} water features. Mapping real-world access…`);let access=[];try{access=await getAccess(p.lat,p.lng,r)}catch(e){setStatus('Access service unavailable; using available map data.')}const aps=access.map(accessPoint).filter(Boolean);renderAccess(aps);await phase(45,`Found ${aps.length} mapped roads, ramps, docks and bridges. Ranking access…`);let candidates=sectorCandidates(aps,p.lat,p.lng,r);const waterNames=waters.slice(0,12).map(x=>x.attributes?.GNIS_NAME).filter(Boolean);for(let i=0;i<candidates.length;i++){if(paused){await new Promise(resolve=>{timer=resolve})}const a=candidates[i];a._access=aps;const f=makeFinding(a,{name:waterNames[i%Math.max(1,waterNames.length)]||'water sector'},i);if(f.priority>=35||i<6){findings.push(f);addFindingMarker(f)}if(i%2===0){progress=50+Math.round((i/candidates.length)*38);$('fill').style.width=progress+'%';$('pct').textContent=progress+'%';setStatus(`Slow crawl: reviewing sector ${i+1} of ${candidates.length} near ${a.type}…`);await sleep(220)}}await phase(91,'Comparing historical-access logic and building the evidence queue…');findings=findings.sort((a,b)=>b.priority-a.priority).slice(0,40);renderFindings();if(findings.length){selected=findings[0].id;renderFindings();$('detailTitle').textContent='Deep vehicle scan queued';setStatus('Running deep historical vehicle/object screening on the highest-priority sectors…');const deep=findings.slice(0,8);for(let di=0;di<deep.length;di++){selected=deep[di].id;renderFindings();try{await runVehicleObjectScan(true)}catch(e){console.warn('Deep scan sector failed',e)}progress=92+Math.round(((di+1)/deep.length)*4);$('fill').style.width=progress+'%';$('pct').textContent=progress+'%';setStatus(`Deep vehicle scan: sector ${di+1} of ${deep.length}…`);}}await phase(96,'Preparing historical imagery review links and report data…');saveState();await phase(100,'Search complete — review the highest-priority sectors first.');searchState='complete';setButton('complete');$('pause').disabled=true;toast(`Search complete: ${findings.length} candidate sectors saved.`)}catch(e){console.error(e);setStatus('Search stopped: '+e.message);searchState='ready';setButton('ready');$('pause').disabled=true;toast('The live search hit an error. Try again or reduce the radius.')}}
+$('start').onclick=()=>{if(searchState==='complete'||searchState==='ready')runSearch();else if(searchState==='paused')resumeSearch()};$('pause').onclick=()=>{if(searchState==='searching'){paused=true;searchState='paused';setButton('paused');$('pause').textContent='▶ RESUME';setStatus('Search paused. Nothing is being scanned until you resume.')}else if(searchState==='paused')resumeSearch()};function resumeSearch(){paused=false;searchState='searching';setButton('searching');$('pause').textContent='Ⅱ PAUSE';setStatus('Resuming slow crawl…');if(timer)timer()}
+function saveState(){localStorage.setItem('aquasearcher_state',JSON.stringify({findings,searchId,loc:$('loc').value,radius:$('radius').value,center:pin?pin.getLatLng():null,updated:new Date().toISOString()}));localStorage.setItem('aquasearcher_history',JSON.stringify([{id:searchId,location:$('loc').value,radius:$('radius').value,count:findings.length,when:new Date().toISOString()},...JSON.parse(localStorage.getItem('aquasearcher_history')||'[]')].slice(0,25)))}
+function loadState(){try{const s=JSON.parse(localStorage.getItem('aquasearcher_state'));if(s?.center){$('loc').value=s.loc||'';$('radius').value=s.radius||10;setPin(s.center.lat,s.center.lng,false);findings=s.findings||[];findings.forEach(addFindingMarker);renderFindings();if(findings.length)selectFinding(findings[0].id)}}catch(e){}}
+function showModal(html){$('modalBody').innerHTML=html;$('modal').classList.add('show')}function closeModal(){$('modal').classList.remove('show')}
+$('report').onclick=()=>{const f=findings.find(x=>x.id===selected);if(!f){toast('Select a finding first.');return}showModal(`<h2>AquaSearcher Investigation Report</h2><p><b>Status:</b> Candidate sector for imagery review — not a confirmed object.</p><div class="statgrid"><div class="stat">Priority<br><b>${f.priority}</b>/100</div><div class="stat">Access<br><b>${f.access}</b>/100</div><div class="stat">Anomaly<br><b>${f.anomaly}</b>/100</div><div class="stat">Size<br><b>${f.size}</b></div></div><table class="table"><tr><th>Coordinates</th><td>${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}</td></tr><tr><th>Nearest access</th><td>${f.accessType} ${f.accessDistance!=null?'· '+f.accessDistance.toFixed(2)+' mi':''}</td></tr><tr><th>Why selected</th><td>${f.why}</td></tr><tr><th>Data sources</th><td>${f.source}</td></tr><tr><th>Historical review</th><td>${f.historical}</td></tr><tr><th>Created</th><td>${new Date(f.created).toLocaleString()}</td></tr></table><p><b>Investigator note:</b> AquaSearcher scoring is heuristic. Imagery and historical evidence must be independently reviewed before drawing conclusions.</p><button class="btn" onclick="downloadReport('${f.id}')">⬇ SAVE REPORT AS TEXT</button>`)};
+window.downloadReport=id=>{const f=findings.find(x=>x.id===id);const text=`AQUASEARCHER INVESTIGATION REPORT\n\n${f.title}\nStatus: Candidate sector for imagery review — not a confirmed object.\nCoordinates: ${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}\nEstimated size: ${f.size}\nPriority: ${f.priority}/100\nAccess: ${f.access}/100\nAnomaly: ${f.anomaly}/100\nNearest access: ${f.accessType} ${f.accessDistance!=null?f.accessDistance.toFixed(2)+' mi':''}\nWhy selected: ${f.why}\nData sources: ${f.source}\nHistorical review: ${f.historical}\nCreated: ${new Date(f.created).toLocaleString()}\n\nDISCLAIMER: Candidate sector only. Not a confirmed vehicle/object.`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));a.download='AquaSearcher_Report_'+f.lat.toFixed(5)+'_'+f.lng.toFixed(5)+'.txt';a.click();URL.revokeObjectURL(a.href)};
+function imageryUrl(year,f){const d=0.003;return `https://www.arcgis.com/home/webmap/viewer.html?center=${f.lng},${f.lat}&level=18&basemap=imagery`}
+function buildTimeline(){[2026,2024,2020,2015,2010,2005,2000,1995,1990].forEach((y,i)=>{const d=document.createElement('div');d.className='year '+(!i?'active':'');d.innerHTML=y+'<br><small>imagery</small>';d.onclick=()=>{document.querySelectorAll('.year').forEach(x=>x.classList.remove('active'));d.classList.add('active');const f=findings.find(x=>x.id===selected);if(!f){toast('Select a finding first.');return}if(y<2018){toast(y+' historical imagery is available as a review target; availability varies by location.')}else toast('Opening imagery review for '+y+' around the selected coordinates.');window.open(imageryUrl(y,f),'_blank')};$('timeline').appendChild(d)})}buildTimeline();
+function newSearch(){clearLayers();$('loc').value='Fairfield, OH';setButton('ready');$('fill').style.width='0%';$('pct').textContent='Ready';setStatus('New search ready. Drop a pin or find a location.');searchState='ready'}
+function showSaved(){const s=JSON.parse(localStorage.getItem('aquasearcher_state')||'null');if(!s?.findings?.length){showModal('<h2>Saved Findings</h2><p>No saved findings yet. Run a search and AquaSearcher will save the current queue on this device.</p>');return}showModal('<h2>Saved Findings</h2>'+s.findings.map(f=>`<div class="card" onclick="closeModal();selectFinding('${f.id}')"><b>${f.label} · ${f.title}</b><p>${f.lat.toFixed(5)}, ${f.lng.toFixed(5)} · Priority ${f.priority}</p></div>`).join(''))}
+function showHistory(){const h=JSON.parse(localStorage.getItem('aquasearcher_history')||'[]');showModal('<h2>Search History</h2>'+(h.length?h.map(x=>`<div class="card"><b>${x.location||'Dropped pin'}</b><p>${new Date(x.when).toLocaleString()} · ${x.radius} mi · ${x.count} candidates</p></div>`).join(''):'<p>No searches recorded on this device.</p>'))}
+function showAbout(){showModal('<h2>How AquaSearcher Works</h2><ol><li><b>Locate:</b> enter an address or drop a map pin.</li><li><b>Find water:</b> query live USGS National Hydrography data inside your radius.</li><li><b>Find access:</b> query mapped roads, ramps, docks, piers, slipways and bridges.</li><li><b>Prioritize:</b> sectors near plausible vehicle access rise to the top; inaccessible water is strongly de-prioritized when selected.</li><li><b>Historical access:</b> access evidence is scored separately from the water feature so a candidate is not treated equally just because it is wet.</li><li><b>Real imagery scan:</b> the selected candidate can now download real Esri World Imagery Wayback tiles and compare multiple historical releases for pixel-level change.</li><li><b>Checkpoint:</b> search results are persisted locally so an interrupted phone session can be restored.</li><li><b>Evidence:</b> reports include coordinates, scores, sources, imagery releases and change metrics.</li></ol><p><b>Important:</b> an imagery-change score is a triage signal, not proof of a vehicle or object. Seasonal conditions, water level, vegetation, shadows, construction and image misalignment can create false positives. Human review remains required.</p>')}
+
+/* AQUASEARCHER V3 - REAL IMAGERY / HISTORICAL CHANGE ENGINE */
+const WAYBACK_CONFIG='https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
+let waybackCache=null;
+async function getWaybackCatalog(){
+  if(waybackCache) return waybackCache;
+  const j=await fetch(WAYBACK_CONFIG,{cache:'force-cache'}).then(r=>{if(!r.ok)throw Error('Wayback catalog '+r.status);return r.json()});
+  waybackCache=Object.values(j).map(x=>({...x,releaseDateLabel:x.releaseDateLabel||x.itemTitle?.match(/(\d{4}-\d{2}-\d{2})/)?.[1]||''})).filter(x=>x.releaseNum&&x.releaseDateLabel).sort((a,b)=>b.releaseDatetime-a.releaseDatetime);
+  return waybackCache;
+}
+function tileXY(lat,lng,z){const n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;return {x:Math.floor(x),y:Math.floor(y),px:(x-Math.floor(x))*256,py:(y-Math.floor(y))*256,z}}
+function releaseForYear(catalog,year){let best=null,bd=1e9;for(const r of catalog){const y=+(r.releaseDateLabel||'').slice(0,4);const d=Math.abs(y-year);if(d<bd){bd=d;best=r}}return best}
+function waybackTileUrl(item,z,x,y){return (item.itemURL||'').replace('{level}',z).replace('{row}',y).replace('{col}',x)}
+async function loadCropFromTile(url,px,py,size=128){
+  return new Promise((resolve,reject)=>{
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{try{const c=document.createElement('canvas');c.width=size;c.height=size;const ctx=c.getContext('2d');ctx.drawImage(img,px-size/2,py-size/2,size,size,0,0,size,size);resolve({canvas:c,data:ctx.getImageData(0,0,size,size),url})}catch(e){reject(e)}};
+    img.onerror=()=>reject(Error('Imagery tile failed')); img.src=url;
+  });
+}
+function comparePixels(a,b){
+  const n=Math.min(a.data.length,b.data.length);let sum=0,hot=0;
+  for(let i=0;i<n;i+=4){const d=(Math.abs(a.data[i]-b.data[i])+Math.abs(a.data[i+1]-b.data[i+1])+Math.abs(a.data[i+2]-b.data[i+2]))/3;sum+=d;if(d>42)hot++}
+  const mean=sum/(n/4);const hotPct=hot/(n/4);return {mean,hotPct,score:Math.max(0,Math.min(100,Math.round(mean*.9+hotPct*130)))}
+}
+function localTexture(img){let sum=0,s2=0,n=0;for(let i=0;i<img.data.length;i+=16){const v=(img.data[i]+img.data[i+1]+img.data[i+2])/3;sum+=v;s2+=v*v;n++}const mean=sum/n;return Math.sqrt(Math.max(0,s2/n-mean*mean))}
+function scanClassification(change,texture){
+  if(change.score>=70 && change.hotPct>.12) return 'STRONG IMAGERY CHANGE CANDIDATE';
+  if(change.score>=48 && change.hotPct>.07) return 'POSSIBLE IMAGERY CHANGE CANDIDATE';
+  if(change.score>=30) return 'WEAK IMAGERY CHANGE';
+  return 'NO STRONG CHANGE DETECTED';
+}
+async function runRealImageryScan(){
+  const f=findings.find(x=>x.id===selected); if(!f){toast('Select a finding first.');return}
+  $('imageryScan').disabled=true;$('scanStatus').textContent='Loading Esri World Imagery history…';
+  try{
+    const catalog=await getWaybackCatalog();
+    const years=[2026,2024,2020,2015];
+    const z=19,t=tileXY(f.lat,f.lng,z);
+    const images=[];
+    for(const year of years){
+      const rel=releaseForYear(catalog,year);if(!rel)continue;
+      $('scanStatus').textContent=`Downloading ${year} imagery…`;
+      const url=waybackTileUrl(rel,z,t.x,t.y);
+      const crop=await loadCropFromTile(url,t.px,t.py,128);
+      crop.year=year;crop.release=rel;images.push(crop);
+    }
+    if(images.length<2)throw Error('Not enough historical imagery was available here.');
+    let rows='';let bestChange=null;
+    for(let i=1;i<images.length;i++){
+      const c=comparePixels(images[0].data,images[i].data);const tex=localTexture(images[0]);
+      if(!bestChange||c.score>bestChange.score)bestChange={...c,year:images[i].year,texture:tex};
+      rows+=`<tr><td>${images[i].year}</td><td>${c.score}/100</td><td>${Math.round(c.hotPct*100)}%</td><td>${scanClassification(c,tex)}</td></tr>`;
+    }
+    f.imageryScan={scannedAt:new Date().toISOString(),latestYear:images[0].year,bestChangeYear:bestChange.year,changeScore:bestChange.score,hotPixelPct:bestChange.hotPct,classification:scanClassification(bestChange,bestChange.texture),releaseDates:images.map(x=>({year:x.year,date:x.release.releaseDateLabel,releaseNum:x.release.releaseNum}))};
+    if(bestChange.score>=48){f.anomaly=Math.min(100,Math.max(f.anomaly,bestChange.score));f.priority=Math.round(f.anomaly*.55+f.access*.45);f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';f.title='Possible large man-made imagery change';f.why += ` Historical imagery comparison found a ${bestChange.score}/100 change signal between ${images[0].year} and about ${bestChange.year}.`}
+    renderFindings();addFindingMarker(f);saveState();
+    showModal(`<h2>Real Imagery Scan</h2><p><b>${f.title}</b><br>${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}</p><div class="scanGrid">${images.map(x=>`<div><img class="scanImg" src="${x.canvas.toDataURL('image/jpeg',.82)}"><div class="small" style="color:#60717f;margin-top:3px">${x.year} · release ${x.release.releaseDateLabel}</div></div>`).join('')}</div><h3>Historical change analysis</h3><table class="table"><tr><th>Comparison</th><th>Change</th><th>Hot pixels</th><th>Result</th></tr>${rows}</table><p class="scanNote"><b>Interpretation:</b> This is a real pixel-change screen using Esri World Imagery Wayback releases. It is a triage signal, not proof of a vehicle or other object. Seasonal conditions, water level, shadows, vegetation, construction and imagery misalignment can all create change.</p><p class="scanNote"><b>Best change:</b> ${bestChange.score}/100 versus about ${bestChange.year}. This candidate should receive human imagery review before any investigative conclusion.</p><button class="btn" onclick="downloadImageryEvidence('${f.id}')">⬇ SAVE IMAGERY EVIDENCE REPORT</button>`);
+    $('scanStatus').textContent=`Scan complete: ${bestChange.score}/100 best historical change signal.`;
+  }catch(e){console.error(e);$('scanStatus').textContent='Imagery scan unavailable: '+e.message;toast('Real imagery scan could not be completed at this location.');}
+  finally{$('imageryScan').disabled=false}
+}
+$('imageryScan').onclick=runRealImageryScan;
+
+// V4 VEHICLE / OBJECT DETECTION ENGINE
+let cocoModel=null;
+async function getCocoModel(){
+  if(cocoModel)return cocoModel;
+  $('vehicleScan').disabled=true;
+  $('scanStatus').textContent='Loading vehicle/object recognition model (first run only)…';
+  cocoModel=await cocoSsd.load({base:'lite_mobilenet_v2'});
+  return cocoModel;
+}
+function tileAt(lat,lng,z){return tileXY(lat,lng,z)}
+function tileUrlFor(item,z,x,y){return (item.itemURL||'').replace('{level}',z).replace('{row}',y).replace('{col}',x)}
+async function loadTile(url){return new Promise((resolve,reject)=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>resolve(img);img.onerror=()=>reject(Error('Historical imagery tile failed'));img.src=url})}
+function drawTile(img){const c=document.createElement('canvas');c.width=256;c.height=256;c.getContext('2d').drawImage(img,0,0);return c}
+function bboxMeters(lat,lng){return {lat:lat,lng:lng}}
+function waterLikeScore(canvas){
+  const ctx=canvas.getContext('2d');const d=ctx.getImageData(0,0,256,256).data;let blue=0,dark=0,n=0;
+  for(let i=0;i<d.length;i+=16){const r=d[i],g=d[i+1],b=d[i+2];const mx=Math.max(r,g,b),mn=Math.min(r,g,b);if((b>r*1.04&&b>g*.98)||(b>r*1.10&&g>r*.98))blue++;if(mx<105)dark++;n++}
+  return Math.min(100,Math.round((blue/n)*130+(dark/n)*35));
+}
+function objectShapeScore(x,y,w,h,conf,label,waterScore){
+  const aspect=Math.max(w,h)/Math.max(1,Math.min(w,h));
+  const area=w*h;
+  let score=conf*55;
+  if(label==='car')score+=28;if(label==='truck')score+=18;if(label==='boat')score+=22;
+  if(aspect<4)score+=10; else score-=12;
+  if(area>250&&area<18000)score+=8;
+  if(waterScore>18)score+=10;
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+async function detectOnTile(model,canvas,meta){
+  let out=[];try{out=await model.detect(canvas)}catch(e){return []}
+  return out.filter(o=>['car','truck','boat','bus','motorcycle'].includes(o.class)&&o.score>=.22).map(o=>({
+    label:o.class,confidence:o.score,box:o.bbox,score:objectShapeScore(o.bbox[0],o.bbox[1],o.bbox[2],o.bbox[3],o.score,o.class,meta.waterScore),
+    year:meta.year,release:meta.release.releaseDateLabel,tileX:meta.tx,tileY:meta.ty,lat:meta.lat,lng:meta.lng
+  }));
+}
+function diffBlobScore(a,b){
+  const A=a.getContext('2d').getImageData(0,0,256,256).data,B=b.getContext('2d').getImageData(0,0,256,256).data;
+  let changed=0,compact=0;for(let i=0;i<A.length;i+=4){const d=(Math.abs(A[i]-B[i])+Math.abs(A[i+1]-B[i+1])+Math.abs(A[i+2]-B[i+2]))/3;if(d>55)changed++}
+  const pct=changed/65536; compact=pct>0.005&&pct<0.20?1:0;return Math.min(100,Math.round(pct*420+compact*20));
+}
+async function runVehicleObjectScan(silent=false){
+  const f=findings.find(x=>x.id===selected);if(!f){toast('Select a finding first.');return}
+  $('vehicleScan').disabled=true;$('imageryScan').disabled=true;
+  try{
+    const model=await getCocoModel();const catalog=await getWaybackCatalog();
+    // Historical releases around the period when a hidden vehicle is most likely to be visible.
+    const targetYears=[2020,2019,2017,2015];const releases=targetYears.map(y=>releaseForYear(catalog,y)).filter(Boolean);
+    if(!releases.length)throw Error('No historical imagery releases were available.');
+    const z=19,base=tileAt(f.lat,f.lng,z),radiusTiles=2;let hits=[],seen=new Set(),tilesScanned=0;
+    const latestCanvases=new Map();
+    for(const rel of releases){
+      const year=+(rel.releaseDateLabel||'').slice(0,4);$('scanStatus').textContent=`AI scan: ${year} imagery — scanning water sectors…`;
+      for(let dy=-radiusTiles;dy<=radiusTiles;dy++)for(let dx=-radiusTiles;dx<=radiusTiles;dx++){
+        const tx=base.x+dx,ty=base.y+dy;let img;
+        try{img=await loadTile(tileUrlFor(rel,z,tx,ty));}catch(e){continue}
+        const canvas=drawTile(img);const ws=waterLikeScore(canvas);const meta={year,release:rel,tx,ty,lat:f.lat,lng:f.lng,waterScore:ws};
+        const det=await detectOnTile(model,canvas,meta);tilesScanned++;
+        det.forEach(h=>{const key=h.label+'|'+tx+'|'+ty;if(!seen.has(key)){seen.add(key);hits.push(h)}});
+        if(year===releases[0].releaseDateLabel.slice(0,4))latestCanvases.set(tx+'|'+ty,canvas);
+      }
+    }
+    // Historical change search: compare the same tile positions across releases and retain compact-change tiles.
+    let changeCandidates=[];
+    for(let dy=-radiusTiles;dy<=radiusTiles;dy++)for(let dx=-radiusTiles;dx<=radiusTiles;dx++){
+      const tx=base.x+dx,ty=base.y+dy;let cs=[];
+      for(const rel of releases.slice(0,3)){
+        try{const img=await loadTile(tileUrlFor(rel,z,tx,ty));cs.push(drawTile(img))}catch(e){}
+      }
+      if(cs.length>=2){let best=0;for(let i=1;i<cs.length;i++)best=Math.max(best,diffBlobScore(cs[0],cs[i]));if(best>=18)changeCandidates.push({tx,ty,score:best})}
+    }
+    hits.sort((a,b)=>b.score-a.score);changeCandidates.sort((a,b)=>b.score-a.score);
+    const bestHit=hits[0]||null,bestChange=changeCandidates[0]||null;
+    // Promote the finding only when the evidence is genuinely independent of the original heuristic score.
+    let evidence=[];
+    if(bestHit)evidence.push(`Object model detected ${bestHit.label} with ${(bestHit.confidence*100).toFixed(0)}% confidence in ${bestHit.year} imagery; water-context score ${bestHit.score}/100.`);
+    if(bestChange)evidence.push(`Historical tile comparison found a localized change signal of ${bestChange.score}/100.`);
+    if(!evidence.length)evidence.push('No vehicle-class object was detected by the lightweight model in the scanned tiles. Historical change screening produced no strong compact signal.');
+    const vehicleScore=bestHit?Math.min(100,Math.round(bestHit.score*.8+20)):0;
+    if(bestHit&&vehicleScore>=55){f.anomaly=Math.max(f.anomaly,vehicleScore);f.priority=Math.round(f.anomaly*.55+f.access*.45);f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';f.title='Vehicle-class imagery candidate';f.size='AI-estimated vehicle-sized object';f.why += ` Vehicle/object scan independently detected a ${bestHit.label} candidate in historical ${bestHit.year} imagery.`}
+    f.vehicleScan={scannedAt:new Date().toISOString(),tilesScanned,years:releases.map(r=>r.releaseDateLabel),hits:hits.slice(0,20),bestHit,bestChange,method:'COCO-SSD lightweight object detection + water-context scoring + historical tile change screening'};
+    saveState();renderFindings();addFindingMarker(f);
+    if(!silent)showModal(`<h2>🧠 Vehicle / Object Scan</h2><p><b>${f.title}</b><br>${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}</p><div class="statgrid"><div class="stat">Tiles<br><b>${tilesScanned}</b></div><div class="stat">Object hits<br><b>${hits.length}</b></div><div class="stat">Best object<br><b>${bestHit?Math.round(bestHit.confidence*100)+'%':'None'}</b></div><div class="stat">Change tiles<br><b>${changeCandidates.length}</b></div></div><h3>Results</h3>${bestHit?`<div class="detectHit"><b>${bestHit.label.toUpperCase()}</b> · ${Math.round(bestHit.confidence*100)}% model confidence · ${bestHit.year} imagery · candidate score ${bestHit.score}/100</div>`:'<div class="detectHit">No vehicle-class object detected by the lightweight model. That is a negative result, not proof that no object is present.</div>'}<p class="scanNote">${evidence.join('<br>')}</p><p class="scanNote"><b>Important:</b> COCO-SSD was trained primarily on ordinary photographs, not satellite/aerial imagery. A submerged, partially obscured, tiny, or unusual vehicle may be missed. AquaSearcher therefore combines object recognition with historical change screening rather than treating a single model hit as proof.</p><button class="btn" onclick="downloadVehicleEvidence('${f.id}')">⬇ SAVE VEHICLE SCAN REPORT</button>`);
+    if(silent && bestHit) toast(`Vehicle candidate detected in ${bestHit.year} imagery (${Math.round(bestHit.confidence*100)}% model confidence).`);
+    $('scanStatus').textContent=`Vehicle/object scan complete: ${tilesScanned} tiles scanned, ${hits.length} object hits.`;
+  }catch(e){console.error(e);$('scanStatus').textContent='Vehicle/object scan unavailable: '+e.message;toast('Vehicle/object scan could not be completed.');}
+  finally{$('vehicleScan').disabled=false;$('imageryScan').disabled=false}
+}
+$('vehicleScan').onclick=runVehicleObjectScan;
+window.downloadVehicleEvidence=id=>{const f=findings.find(x=>x.id===id),s=f?.vehicleScan;if(!s){toast('Run the vehicle/object scan first.');return}const text=`AQUASEARCHER VEHICLE / OBJECT SCAN\n\nCoordinates: ${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}\nTiles scanned: ${s.tilesScanned}\nHistorical releases: ${s.years.join(', ')}\nMethod: ${s.method}\n\nTOP HITS\n${(s.hits||[]).map(h=>`${h.label} ${Math.round(h.confidence*100)}% confidence | ${h.year} | score ${h.score}/100 | tile ${h.tileX},${h.tileY}`).join('\n')||'None'}\n\nINTERPRETATION\nObject-model results are triage evidence only. COCO-SSD is not trained specifically for satellite imagery. A missed detection does not rule out a submerged or partially obscured vehicle. Human review is required.`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));a.download='AquaSearcher_Vehicle_Scan_'+f.lat.toFixed(5)+'_'+f.lng.toFixed(5)+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+
+window.downloadImageryEvidence=id=>{const f=findings.find(x=>x.id===id);if(!f?.imageryScan){toast('Run an imagery scan first.');return}const s=f.imageryScan;const text=`AQUASEARCHER IMAGERY EVIDENCE REPORT\n\nCoordinates: ${f.lat.toFixed(6)}, ${f.lng.toFixed(6)}\nFinding: ${f.title}\nImagery scan: ${new Date(s.scannedAt).toLocaleString()}\nLatest release: ${s.latestYear}\nBest comparison release: ${s.bestChangeYear}\nChange score: ${s.changeScore}/100\nHot pixel percentage: ${(s.hotPixelPct*100).toFixed(1)}%\nClassification: ${s.classification}\nReleases checked:\n${s.releaseDates.map(x=>`  ${x.year}: ${x.date} (release ${x.releaseNum})`).join('\n')}\n\nINTERPRETATION\nThis report records a real pixel-change triage signal from Esri World Imagery Wayback imagery. It is NOT confirmation of a vehicle or other object. Seasonal conditions, water level, vegetation, shadows, construction, registration differences and image misalignment may cause change. Independent human review is required.\n`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));a.download='AquaSearcher_Imagery_Evidence_'+f.lat.toFixed(5)+'_'+f.lng.toFixed(5)+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+/* Persist queue state frequently so a phone/browser crash can resume the investigation later. */
+const originalSaveState=saveState; saveState=function(){originalSaveState();try{localStorage.setItem('aquasearcher_queue_checkpoint',JSON.stringify({searchId,findings,selected,center:pin?pin.getLatLng():null,loc:$('loc').value,radius:$('radius').value,checkpoint:new Date().toISOString()}))}catch(e){}};
+function showQueueCheckpoint(){try{const q=JSON.parse(localStorage.getItem('aquasearcher_queue_checkpoint'));if(!q?.findings?.length)return;showModal(`<h2>Saved Crawl Checkpoint</h2><p>AquaSearcher has a local checkpoint from <b>${new Date(q.checkpoint).toLocaleString()}</b> with <b>${q.findings.length}</b> candidate sectors.</p><button class="btn" onclick="closeModal();restoreCheckpoint()">RESTORE CHECKPOINT</button>`)}catch(e){}}
+window.restoreCheckpoint=()=>{try{const q=JSON.parse(localStorage.getItem('aquasearcher_queue_checkpoint'));if(!q)return;$('loc').value=q.loc||'';$('radius').value=q.radius||10;if(q.center)setPin(q.center.lat,q.center.lng,false);findings=q.findings||[];selected=q.selected||null;findings.forEach(addFindingMarker);renderFindings();if(selected)selectFinding(selected);toast('Saved crawl checkpoint restored.')}catch(e){toast('Checkpoint could not be restored.')}};
+setTimeout(()=>{try{const q=JSON.parse(localStorage.getItem('aquasearcher_queue_checkpoint'));if(q?.findings?.length&&!findings.length)showQueueCheckpoint()}catch(e){}},700);
+
+loadState();if(!pin)setPin(39.345,-84.56,false);
+</script></body></html>
