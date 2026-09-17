@@ -1,10 +1,11 @@
-name: Apply AquaSearcher V14
+name: Apply AquaSearcher V15
 
 on:
   push:
     branches: [main]
     paths:
       - 'v14-improvements.js'
+      - 'v15-historical-access.js'
       - 'historical-evidence.js'
       - '.github/workflows/aquasearcher-v14.yml'
 
@@ -16,19 +17,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inject V14 accuracy and historical evidence layers
+      - name: Inject AquaSearcher accuracy and historical access layers
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
-          for tag in ['<script src="v14-improvements.js"></script>','<script src="historical-evidence.js"></script>']:
+          for tag in [
+              '<script src="v14-improvements.js"></script>',
+              '<script src="historical-evidence.js"></script>',
+              '<script src="v15-historical-access.js"></script>'
+          ]:
               if tag not in s:
                   if '</body>' not in s:
                       raise SystemExit('index.html has no </body> marker')
                   s=s.replace('</body>', tag+'\n</body>', 1)
-          s=s.replace('AquaSearcher V13','AquaSearcher V14')
-          s=s.replace('<small>V13</small>','<small>V14</small>')
+          s=s.replace('AquaSearcher V13','AquaSearcher V15')
+          s=s.replace('AquaSearcher V14','AquaSearcher V15')
+          s=s.replace('<small>V13</small>','<small>V15</small>')
+          s=s.replace('<small>V14</small>','<small>V15</small>')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Verify JavaScript syntax
@@ -36,24 +43,23 @@ jobs:
           python - <<'PY'
           import re
           from pathlib import Path
-          for name in ['index.html','v14-improvements.js','historical-evidence.js']:
-              s=Path(name).read_text(encoding='utf-8')
-              if name.endswith('.html'):
-                  scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S)
-                  Path('/tmp/aqua-inline.js').write_text('\n'.join(scripts),encoding='utf-8')
+          s=Path('index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S)
+          Path('/tmp/aqua-inline.js').write_text('\n'.join(scripts),encoding='utf-8')
           print('JavaScript files prepared for syntax check.')
           PY
           node --check /tmp/aqua-inline.js
           node --check v14-improvements.js
           node --check historical-evidence.js
-      - name: Commit V14
+          node --check v15-historical-access.js
+      - name: Commit V15
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html v14-improvements.js historical-evidence.js
+          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js
           if git diff --cached --quiet; then
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Apply AquaSearcher historical evidence viewer [skip ci]'
+          git commit -m 'Add historical road and ramp screening [skip ci]'
           git push
