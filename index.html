@@ -99,5 +99,6 @@ $('pause').onclick=()=>{if(state!=='searching')return;paused=!paused;$('pause').
 $('start').onclick=run;$('closeModal').onclick=closeModal;$('newBtn').onclick=()=>{state='ready';paused=false;$('start').disabled=false;$('pause').disabled=true;$('start').textContent='▶ START SLOW CRAWL';clearAll()};$('historyBtn').onclick=()=>{const h=JSON.parse(localStorage.getItem('aqhist')||'[]');showModal('<h3>Search History</h3>'+(h.length?h.map(x=>`<p>${x.when} · ${x.location} · ${x.radius} mi · ${x.count} candidates · ${x.screened} screened</p>`).join(''):'<p>No searches yet.</p>'))};$('aboutBtn').onclick=()=>showModal('<h3>AquaSearcher V14</h3><p>Searches water and river features, analyzes mapped access, compares real historical imagery releases, and screens the highest-priority candidates for vehicle-sized objects. Exact supplied coordinates receive a dedicated micro-search. Results are screening evidence, not proof.</p>');
 </script>
 <script src="v14-improvements.js"></script>
+<script src="historical-evidence.js"></script>
 </body>
 </html>
