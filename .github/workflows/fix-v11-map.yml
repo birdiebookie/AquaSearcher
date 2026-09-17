@@ -1,0 +1,38 @@
+name: Fix AquaSearcher V11 map
+on:
+  push:
+    paths:
+      - '.v11-map-fix-trigger'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix map CDN and self-check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css')
+          s=s.replace('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js')
+          s=s.replace("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}","https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+          s=s.replace("attribution:'© Esri, HERE, Garmin, Intermap, increment P Corp., GEBCO, USGS, FAO, NPS, NRCAN, GeoBase, IGN, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), (c) OpenStreetMap contributors, and the GIS User Community'","attribution:'© OpenStreetMap contributors'")
+          if 'cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js' not in s:
+              raise SystemExit('Leaflet JS replacement did not occur')
+          if "tile.openstreetmap.org/{z}/{x}/{y}.png" not in s:
+              raise SystemExit('Tile replacement did not occur')
+          p.write_text(s)
+          PY
+          grep -q 'cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js' index.html
+          grep -q 'tile.openstreetmap.org' index.html
+      - name: Commit fix and remove repair files
+        run: |
+          git config user.name 'AquaSearcher Repair Bot'
+          git config user.email 'actions@github.com'
+          git add index.html
+          git rm -f .v11-map-fix-trigger .github/workflows/fix-v11-map.yml
+          git commit -m 'Fix V11 map loading and verify assets'
+          git push
