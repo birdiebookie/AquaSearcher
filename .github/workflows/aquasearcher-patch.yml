@@ -1,0 +1,73 @@
+name: AquaSearcher patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply targeted fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+
+          s=s.replace('<title>AquaSearcher V9</title>','<title>AquaSearcher V10</title>',1)
+          s=s.replace('AQUA<span>SEARCHER</span> <small style="font-size:11px;color:#9fdcff">V9</small>','AQUA<span>SEARCHER</span> <small style="font-size:11px;color:#9fdcff">V10</small>',1)
+
+          marker='function sortedFindings(){'
+          exact="""function coordinateInput(v){return /^\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*[, ]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*$/.test(v||'')}function makeExactPinFinding(a){const p=pin.getLatLng(),ft=.0000091,fl=.0000091/Math.cos(p.lat*Math.PI/180),pts=[p,{lat:p.lat+ft,lng:p.lng},{lat:p.lat-ft,lng:p.lng},{lat:p.lat,lng:p.lng+fl},{lat:p.lat,lng:p.lng-fl},{lat:p.lat+ft,lng:p.lng+fl},{lat:p.lat+ft,lng:p.lng-fl},{lat:p.lat-ft,lng:p.lng+fl},{lat:p.lat-ft,lng:p.lng-fl}],n=nearest(p,a),as=n.best?Math.max(0,Math.min(100,Math.round(100-n.distance*35+n.best.boost))):50;return{id:crypto.randomUUID(),lat:p.lat,lng:p.lng,name:'Exact Pin Test',ftype:'known coordinate',access:as,accessType:n.best?.type||'exact coordinate',accessDistance:n.best?n.distance:null,anomaly:100,priority:100,pinDistance:0,nearPin:true,exact:true,samples:pts,label:'HIGH',why:'Known supplied coordinate. Tight 4–50 ft micro-search centered on the exact pin.',created:new Date().toISOString()}}"""
+          if marker in s and 'function coordinateInput(v)' not in s:
+              s=s.replace(marker,exact+marker,1)
+
+          old="let ws=[];await step(5,'Finding water features across the ENTIRE search area…');ws=await getWater(p,r);await waitIfPaused();ws.forEach(addW);"
+          new="let ws=[];await step(5,'Finding water features across the ENTIRE search area…');let coordinateSearch=coordinateInput($('loc').value);try{ws=await getWater(p,r)}catch(e){console.warn('Water discovery failed; exact-coordinate mode may continue:',e);if(!coordinateSearch)throw e;ws=[]}await waitIfPaused();ws.forEach(addW);"
+          if old not in s:
+              raise SystemExit('water-run pattern not found')
+          s=s.replace(old,new,1)
+
+          old2="findings=ws.map((w,i)=>makeFinding(w,i,aa)).filter(Boolean);findings.forEach(mark);render();"
+          new2="findings=ws.map((w,i)=>makeFinding(w,i,aa)).filter(Boolean);if(coordinateSearch)findings.unshift(makeExactPinFinding(aa));findings.forEach(mark);render();"
+          if old2 not in s:
+              raise SystemExit('finding pattern not found')
+          s=s.replace(old2,new2,1)
+
+          old3="let use=rs.length>16?rs.filter((r,i)=>i===0||i===rs.length-1||i%Math.ceil(rs.length/16)===0):rs,pts=(f.samples||[{lat:f.lat,lng:f.lng}]).slice(0,8),hits=[];"
+          new3="let use=rs.length>8?rs.filter((r,i)=>i===0||i===rs.length-1||i%Math.ceil(rs.length/8)===0):rs,pts=(f.exact?f.samples:(f.samples||[{lat:f.lat,lng:f.lng}]).slice(0,4)),hits=[];"
+          if old3 not in s:
+              raise SystemExit('vehicle-use pattern not found')
+          s=s.replace(old3,new3,1)
+
+          old4="let c=await img(tile(use[i],p.lat,p.lng,20)),d=await coco.detect(c);d.filter"
+          new4="let c=await img(tile(use[i],p.lat,p.lng,20));await sleep(0);let d=await coco.detect(c);await sleep(0);d.filter"
+          if old4 not in s:
+              raise SystemExit('vehicle-detect pattern not found')
+          s=s.replace(old4,new4,1)
+
+          old5="const top=sortedFindings().slice(0,Math.min(12,findings.length));"
+          new5="const top=sortedFindings().slice(0,Math.min(6,findings.length));"
+          if old5 not in s:
+              raise SystemExit('vehicle-top pattern not found')
+          s=s.replace(old5,new5,1)
+
+          p.write_text(s)
+          PY
+          if git diff --quiet; then
+            echo 'No changes made'; exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'AquaSearcher V10 exact pin and stability fixes'
+          git push
+          rm -f .github/workflows/aquasearcher-patch.yml
+          git add -A
+          git commit -m 'Remove one-time patch workflow'
+          git push
