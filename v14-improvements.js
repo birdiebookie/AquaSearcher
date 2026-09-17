@@ -29,7 +29,7 @@
     for(let i=0;i<use.length;i++){
       if(q('pause')?.textContent?.includes('RESUME'))await sleep(250);
       if(q('scan'))q('scan').textContent=`Vehicle/object screening: ${use[i].date} · ${i+1}/${use.length}`;
-      for(const p of base)try{const d=await coco.detect(await window.img(window.tile(use[i],p.lat,p.lng,18));d.filter(o=>['car','truck','boat','bus','motorcycle'].includes(o.class)&&o.score>=.20).forEach(o=>hits.push({label:o.class,confidence:o.score,year:use[i].date,lat:p.lat,lng:p.lng}))}catch(e){}
+      for(const p of base)try{const d=await coco.detect(await window.img(window.tile(use[i],p.lat,p.lng,18)));d.filter(o=>['car','truck','boat','bus','motorcycle'].includes(o.class)&&o.score>=.20).forEach(o=>hits.push({label:o.class,confidence:o.score,year:use[i].date,lat:p.lat,lng:p.lng}))}catch(e){}
     }
     hits.sort((a,b)=>b.confidence-a.confidence);f.veh={hits,best:hits[0]||null,releases:use.map(x=>x.date),samplePoints:base.length,detected:hits.length>0,status:hits.length?'Automated object candidate detected':'No conventional vehicle object detected by automated screening; this does not rule out a vehicle',confidence:hits[0]?Math.round(hits[0].confidence*100):0};
     if(typeof window.render==='function')window.render();if(!silent&&typeof window.showCandidate==='function')window.showCandidate(f);return hits[0]||null;
