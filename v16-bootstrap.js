@@ -1,6 +1,7 @@
 /* AquaSearcher V16 bootstrap.
    This is the integration layer: the access crawler is run as part of the
-   real START button flow, not as a second decorative scan. */
+   real START button flow, not as a second decorative scan.
+   V16.1: access targets are first-class search results. */
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
