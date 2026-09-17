@@ -11,6 +11,7 @@ on:
       - 'v16-bootstrap.js'
       - 'v16-map-hook.js'
       - 'v16-investigator-links.js'
+      - 'v16-login.js'
       - '.github/workflows/aquasearcher-v14.yml'
 
 permissions:
@@ -21,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inject AquaSearcher V16 access crawler
+      - name: Inject AquaSearcher V16 access crawler and investigator login
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -33,8 +34,6 @@ jobs:
               if marker not in s:
                   raise SystemExit('index.html inline app script marker not found')
               s=s.replace(marker,hook+'\n'+marker,1)
-          # Expose the live base findings to the investigator-link layer without
-          # changing the application's internal scoring or rendering logic.
           if 'window.__aquaFindings=findings;' not in s:
               if 'function render(){' in s:
                   s=s.replace('function render(){','function render(){window.__aquaFindings=findings;',1)
@@ -46,7 +45,8 @@ jobs:
               '<script src="v15-historical-access.js"></script>',
               '<script src="v16-access-crawler.js"></script>',
               '<script src="v16-bootstrap.js"></script>',
-              '<script src="v16-investigator-links.js"></script>'
+              '<script src="v16-investigator-links.js"></script>',
+              '<script src="v16-login.js"></script>'
           ]:
               if tag not in s:
                   if '</body>' not in s:
@@ -78,14 +78,15 @@ jobs:
           node --check v16-bootstrap.js
           node --check v16-map-hook.js
           node --check v16-investigator-links.js
+          node --check v16-login.js
       - name: Commit V16
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-bootstrap.js v16-map-hook.js v16-investigator-links.js
+          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-bootstrap.js v16-map-hook.js v16-investigator-links.js v16-login.js
           if git diff --cached --quiet; then
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Add investigator coordinates and Google Earth links [skip ci]'
+          git commit -m 'Integrate investigator login gate [skip ci]'
           git push
