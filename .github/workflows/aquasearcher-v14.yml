@@ -1,0 +1,43 @@
+name: Apply AquaSearcher V14
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'v14-improvements.js'
+      - '.github/workflows/aquasearcher-v14.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject V14 accuracy layer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          tag='<script src="v14-improvements.js"></script>'
+          if tag not in s:
+              if '</body>' not in s:
+                  raise SystemExit('index.html has no </body> marker')
+              s=s.replace('</body>', tag+'\n</body>', 1)
+          s=s.replace('AquaSearcher V13','AquaSearcher V14')
+          s=s.replace('<small>V13</small>','<small>V14</small>')
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit V14
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html v14-improvements.js
+          if git diff --cached --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git commit -m 'Apply AquaSearcher V14 accuracy improvements [skip ci]'
+          git push
