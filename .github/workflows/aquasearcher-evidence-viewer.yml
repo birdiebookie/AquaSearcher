@@ -1,0 +1,68 @@
+name: AquaSearcher evidence viewer
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-evidence-viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add evidence viewer to V13
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          if 'AquaSearcher V14' in s:
+              print('Already patched')
+              raise SystemExit(0)
+
+          s = s.replace('<title>AquaSearcher V13</title>', '<title>AquaSearcher V14</title>')
+          s = s.replace('<small>V13</small>', '<small>V14</small>')
+
+          css = '''.evidenceWrap{margin-top:14px;background:#fff;border:1px solid #cbd9e3;border-radius:10px;padding:12px;color:#102536}.evidenceHead{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.evidenceScore{font-size:18px;font-weight:900}.evidenceGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.evidencePane{border:1px solid #cbd9e3;border-radius:8px;overflow:hidden;background:#eef4f8}.evidencePane b{display:block;padding:7px 9px;background:#173f59;color:#fff;font-size:11px}.evidencePane img{display:block;width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;background:#dfeaf0}.swipeBox{position:relative;margin-top:10px;border:1px solid #cbd9e3;border-radius:8px;overflow:hidden;background:#dfeaf0}.swipeBox img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}.swipeAfter{position:absolute;inset:0;width:50%;overflow:hidden;border-right:3px solid #fff}.swipeAfter img{width:100%;max-width:none;height:100%;object-fit:cover}.swipeHandle{position:absolute;top:0;bottom:0;left:50%;width:4px;background:#fff;transform:translateX(-50%);pointer-events:none;box-shadow:0 0 4px #333}.swipeHandle span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#06243a;color:#fff;border-radius:15px;padding:5px 8px;font-weight:900;font-size:11px;white-space:nowrap}.swipeRange{width:100%;margin:8px 0}.evidenceMeta{font-size:11px;color:#60717f;margin-top:8px}.evidenceNote{font-size:10px;color:#718391;margin-top:7px}.evidenceActions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.evidenceActions a{display:inline-block;padding:7px 9px;border-radius:7px;background:#168ee8;color:#fff;text-decoration:none;font-size:11px;font-weight:700}@media(max-width:700px){.evidenceGrid{grid-template-columns:1fr}.evidencePane img,.swipeBox img{aspect-ratio:4/3}}'''
+          s = s.replace('.small{font-size:10px;color:#718391}', '.small{font-size:10px;color:#718391}'+css)
+
+          detail_new = '''<div class="detail"><div><b>Historical Imagery Releases</b><div id="timeline" class="timeline" style="margin-top:7px"></div></div><div style="display:flex;gap:12px;margin-top:12px"><div style="flex:1"><b id="title">No finding selected</b><p id="detailText" class="small" style="color:#b9d0dc">Select a water candidate to review evidence.</p></div><div style="width:300px"><button class="report" id="imgBtn">🛰 RUN REAL HISTORICAL IMAGERY SCAN</button><button class="report" id="vehBtn">🧠 RUN VEHICLE / OBJECT SCAN</button></div></div><div id="scan" class="small" style="margin-top:6px;color:#a9c3d1"></div><div id="evidence" class="evidenceWrap"><div class="small">Click a Priority Queue candidate to view its historical aerial evidence here.</div></div></div>'''
+          start = s.index('<div class="detail">')
+          end = s.index('\n<div id="modal"', start)
+          s = s[:start] + detail_new + s[end:]
+
+          old_select = "function selectF(id){selected=id;const f=findings.find(x=>x.id===id);if(!f)return;$('title').textContent=f.name+' · '+f.ftype;$('detailText').textContent=`Priority ${f.priority}/100. Access ${f.access}/100. Historical change ${f.hist?.best??'not screened'}/100. ${f.why} Automated results are screening evidence only.`;if(map){map.setView([f.lat,f.lng],18);showCandidate(f)}}"
+          new_select = "function selectF(id){selected=id;const f=findings.find(x=>x.id===id);if(!f)return;$('title').textContent=f.name+' · '+f.ftype;$('detailText').textContent=`Priority ${f.priority}/100. Access ${f.access}/100. Historical change ${f.hist?.best??'not screened'}/100. ${f.why} Automated results are screening evidence only.`;if(map)map.setView([f.lat,f.lng],18);showCandidate(f);showEvidence(f);$('evidence').scrollIntoView({behavior:'smooth',block:'start'})}"
+          if old_select not in s:
+              raise SystemExit('selectF pattern not found')
+          s = s.replace(old_select, new_select)
+
+          marker = 'function showCandidate(f){'
+          evidence_js = r'''function showEvidence(f){const box=$('evidence');if(!box)return;if(!f.hist?.beforeUrl||!f.hist?.afterUrl){box.innerHTML='<div class="small">No usable before/after imagery is available for this candidate yet. Run the historical imagery scan first.</div>';return}const h=f.hist;box.innerHTML=`<div class="evidenceHead"><div><div style="font-weight:900;font-size:15px">🛰 HISTORICAL ANOMALY EVIDENCE</div><div class="evidenceMeta">${f.name} · ${f.pinDistance<999?f.pinDistance.toFixed(2)+' mi from search pin':''}</div></div><div class="evidenceScore">${h.best}/100 CHANGE</div></div><div class="evidenceGrid"><div class="evidencePane"><b>BEFORE · WAYBACK RELEASE ${h.from}</b><img src="${h.beforeUrl}" alt="Before aerial imagery" loading="lazy"></div><div class="evidencePane"><b>AFTER · WAYBACK RELEASE ${h.to}</b><img src="${h.afterUrl}" alt="After aerial imagery" loading="lazy"></div></div><div style="margin-top:12px;font-weight:900">BEFORE ↔ AFTER SWIPE</div><div class="swipeBox" id="swipeBox"><img src="${h.afterUrl}" alt="After aerial imagery"><div class="swipeAfter" id="swipeAfter"><img src="${h.beforeUrl}" alt="Before aerial imagery"></div><div class="swipeHandle" id="swipeHandle"><span>↔ DRAG</span></div></div><input class="swipeRange" id="swipeRange" type="range" min="0" max="100" value="50" aria-label="Before and after image slider"><div class="evidenceActions"><a href="${h.beforeUrl}" target="_blank" rel="noopener">Open BEFORE image</a><a href="${h.afterUrl}" target="_blank" rel="noopener">Open AFTER image</a></div><div class="evidenceNote">⚠ The dates above are Esri Wayback publication/release dates, not necessarily the actual image-capture dates. The change score is an automated screening signal, not proof of a vehicle or other object.</div>`;const range=$('swipeRange'),after=$('swipeAfter'),handle=$('swipeHandle');const sync=()=>{const v=+range.value;after.style.width=v+'%';handle.style.left=v+'%'};range.oninput=sync;sync()}
+'''
+          if marker not in s:
+              raise SystemExit('showCandidate marker not found')
+          s = s.replace(marker, evidence_js + marker, 1)
+
+          old_show = "function showCandidate(f){$('title').textContent=f.name+' · '+f.ftype;$('detailText').textContent=`Priority ${f.priority}/100. Access ${f.access}/100. Historical change ${f.hist?.best??'not screened'}/100. ${f.why} Automated results are screening evidence only.`;$('imgBtn').onclick=()=>histScan(f,releases(waybackCatalog||[]),false,false);$('vehBtn').onclick=()=>vehicleScan(f,releases(waybackCatalog||[]),false);$('scan').textContent=f.hist?.beforeUrl?'Best change: '+f.hist.from+' → '+f.hist.to:'Select a scan button to review this candidate.'}"
+          new_show = "function showCandidate(f){$('title').textContent=f.name+' · '+f.ftype;$('detailText').textContent=`Priority ${f.priority}/100. Access ${f.access}/100. Historical change ${f.hist?.best??'not screened'}/100. ${f.why} Automated results are screening evidence only.`;$('imgBtn').onclick=async()=>{await histScan(f,releases(waybackCatalog||[]),false,false);showEvidence(f)};$('vehBtn').onclick=async()=>{await vehicleScan(f,releases(waybackCatalog||[]),false);showEvidence(f)};$('scan').textContent=f.hist?.beforeUrl?'Best change: '+f.hist.from+' → '+f.hist.to:'Select a scan button to review this candidate.';showEvidence(f)}"
+          if old_show not in s:
+              raise SystemExit('showCandidate pattern not found')
+          s = s.replace(old_show, new_show)
+
+          p.write_text(s, encoding='utf-8')
+          print('Evidence viewer patch written')
+          PY
+
+          git config user.name "AquaSearcher Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && echo "No changes needed" && exit 0
+          git commit -m "Add V14 historical before-after evidence viewer"
+          git push
