@@ -9,6 +9,7 @@ on:
       - 'historical-evidence.js'
       - 'v16-access-crawler.js'
       - 'v16-bootstrap.js'
+      - 'v16-map-hook.js'
       - '.github/workflows/aquasearcher-v14.yml'
 
 permissions:
@@ -25,6 +26,12 @@ jobs:
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
+          hook='<script src="v16-map-hook.js"></script>'
+          marker="<script>\n'use strict';"
+          if hook not in s:
+              if marker not in s:
+                  raise SystemExit('index.html inline app script marker not found')
+              s=s.replace(marker,hook+'\n'+marker,1)
           for tag in [
               '<script src="v14-improvements.js"></script>',
               '<script src="historical-evidence.js"></script>',
@@ -56,18 +63,19 @@ jobs:
           PY
           node --check /tmp/aqua-inline.js
           node --check v14-improvements.js
-          node --check historical-evidence.js
           node --check v15-historical-access.js
+          node --check historical-evidence.js
           node --check v16-access-crawler.js
           node --check v16-bootstrap.js
+          node --check v16-map-hook.js
       - name: Commit V16
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-bootstrap.js
+          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-bootstrap.js v16-map-hook.js
           if git diff --cached --quiet; then
             echo 'No changes needed.'
             exit 0
           fi
-          git commit -m 'Add exhaustive ramps and road-end access crawler [skip ci]'
+          git commit -m 'Integrate exhaustive access crawler into real search flow [skip ci]'
           git push
