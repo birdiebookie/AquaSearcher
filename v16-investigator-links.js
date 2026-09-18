@@ -13,11 +13,8 @@ function addLink(card,f){
   const box=document.createElement('div');
   box.dataset.earthLink='1';
   box.style.cssText='margin-top:8px;padding-top:7px;border-top:1px solid #d7e2ea;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
-  const changeFrom=f?.hist?.from||'';
-  const changeTo=f?.hist?.to||'';
-  const changeYear=changeTo ? String(changeTo).slice(0,4) : '';
-  const changeWindow=(changeFrom&&changeTo) ? changeFrom+' → '+changeTo : '';
-  box.innerHTML=`<div style="width:100%;padding:6px 8px;background:#fff4bf;border:2px solid #eab308;border-radius:7px"><div style="font-size:10px;font-weight:900;color:#765b00;letter-spacing:.4px">YEAR OF CHANGE</div><div style="font-size:24px;font-weight:900;color:#06243a;line-height:1.05">${changeYear||'NOT ESTABLISHED'}</div>${changeWindow?\`<div style="font-size:10px;color:#60717f;margin-top:2px">Detected change window: ${changeWindow}</div>\`:''}</div><span style="font-size:11px;font-weight:900;color:#284b5e">📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}</span><a href="${earthUrl(lat,lng)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;font-weight:900;color:#168ee8;text-decoration:none">🌎 OPEN IN GOOGLE EARTH ↗</a>`;
+  const changeYear=f?.hist?.changeYear||((f?.hist?.to)?String(f.hist.to).slice(0,4):'');
+  box.innerHTML=`<div style="width:100%;padding:6px 8px;background:#fff4bf;border:2px solid #eab308;border-radius:7px"><div style="font-size:10px;font-weight:900;color:#765b00;letter-spacing:.4px">YEAR OF CHANGE</div><div style="font-size:24px;font-weight:900;color:#06243a;line-height:1.05">${changeYear||'NOT ESTABLISHED'}</div></div><span style="font-size:11px;font-weight:900;color:#284b5e">📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}</span><a href="${earthUrl(lat,lng)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;font-weight:900;color:#168ee8;text-decoration:none">🌎 OPEN IN GOOGLE EARTH ↗</a>`;
   card.appendChild(box);
 }
 function candidates(){
