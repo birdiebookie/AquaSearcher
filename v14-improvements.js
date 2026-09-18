@@ -6,9 +6,10 @@
     const g=f&&f.geometry;if(!g)return null;const pts=[];
     if(Array.isArray(g.rings))for(const ring of g.rings||[])for(const p of ring||[])if(Array.isArray(p)&&Number.isFinite(+p[0])&&Number.isFinite(+p[1]))pts.push({x:+p[0],y:+p[1]});
     else if(Array.isArray(g))for(const p of g)if(p&&Number.isFinite(+p.x)&&Number.isFinite(+p.y))pts.push({x:+p.x,y:+p.y});
-    if(!pts.length)return null;let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    for(const p of pts){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y)}
-    return{lat:(minY+maxY)/2,lng:(minX+maxX)/2};
+    if(!pts.length)return null;
+    const pin=window.pin?.getLatLng?.();
+    if(pin){let best=pts[0],bd=Infinity;for(const p of pts){const d=(p.y-pin.lat)**2+((p.x-pin.lng)*Math.cos(pin.lat*Math.PI/180))**2;if(d<bd){bd=d;best=p}}return{lat:best.y,lng:best.x};}
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;for(const p of pts){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y)}return{lat:(minY+maxY)/2,lng:(minX+maxX)/2};
   };
   const originalMakeFinding=window.makeFinding;
   if(typeof originalMakeFinding==='function')window.makeFinding=function(w,i,a){const f=originalMakeFinding(w,i,a);if(f){f.geometry=w.geometry||null;f.source=w._osm?'OpenStreetMap':'USGS National Hydrography Dataset'}return f};
