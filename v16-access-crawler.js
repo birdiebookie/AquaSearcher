@@ -258,7 +258,9 @@ async function scanAccessCandidate(f,releases){
 
 window.aquaScoreFinding=function(f){
   const clamp=v=>Math.max(0,Math.min(100,Number(v)||0));
-  const access=clamp(f.access);
+  const currentAccess=clamp(f.access);
+  const historicalAccess=clamp(f.histAccess?.score??0);
+  const access=clamp(currentAccess*.65+historicalAccess*.35);
   const historical=clamp(f.hist?.heroScore??f.hist?.best??f.historicalChange??f.changeScore??0);
   const vehicle=clamp(f.vehicleEvidence?.score??f.veh?.detectionScore??f.objectScore??0);
   f.historicalChange=historical;
