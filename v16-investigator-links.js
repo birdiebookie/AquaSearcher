@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const THRESHOLD=0;
-function earthUrl(lat,lng){return `https://earth.google.com/web/@${lat},${lng},500a,1200d,35y,0h,0t,0r`}
+function earthUrl(lat,lng){return `https://earth.google.com/web/search/${encodeURIComponent(lat+','+lng)}/`}
 function validPoint(f){return f&&Number.isFinite(+f.lat)&&Number.isFinite(+(f.lng??f.lon))}
 function addLink(card,f){
   if(!card||!validPoint(f)||(+f.priority||0)<THRESHOLD)return;
