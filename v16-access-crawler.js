@@ -209,7 +209,7 @@ function renderAccessSection(list){
   const wrap=document.createElement('div');
   wrap.innerHTML=`<div style="margin:12px 0 6px;font-weight:900;color:#0a4565">🚤 ACCESS-POINT SEARCHES <span class="small">(${list.length})</span></div>`;
   for(const f of list.slice().sort((a,b)=>b.priority-a.priority)){
-    const d=document.createElement('div');d.className='card '+(f.label==='HIGH'?'high':f.label==='LOW'?'low':'');
+    const d=document.createElement('div');d.className='card '+(f.label==='HIGH'?'high':f.label==='LOW'?'low':'');d.dataset.findingId=f.id;
     d.innerHTML=`<span class="rank">${f.label}</span><b>${f.name}</b><span class="pill">Priority ${f.priority}</span><div class="small">${f.accessType} · ${f.source||''} · Access ${f.access}/100${f.waterDistance?` · ${f.waterDistance}m from mapped water`:''}</div><div class="small">Historical target: entry corridor ${f.corridor?.sampleMeters?.join(', ')||'10–150'} ft</div>`;
     d.onclick=()=>{selected=f;window.selected=f;if(typeof window.showCandidate==='function')window.showCandidate(f)};
     wrap.appendChild(d);
@@ -221,7 +221,7 @@ function renderAccessSection(list){
 async function scanAccessCandidate(f,releases){
   if(!f?.corridor||!releases?.length)return;
   const pts=f.corridor.samplePoints||[{lat:f.lat,lng:f.lng}];
-  const rs=releases.length<=10?releases:releases.filter((_,i)=>i%Math.ceil(releases.length/10)===0||i===releases.length-1);
+  const rs=releases;
   let best=0,bestDate='',hits=0;
   for(let ri=0;ri<rs.length;ri++){
     const rel=rs[ri];
@@ -255,6 +255,24 @@ async function scanAccessCandidate(f,releases){
   return f;
 }
 
+window.aquaScoreFinding=function(f){
+  const clamp=v=>Math.max(0,Math.min(100,Number(v)||0));
+  const access=clamp(f.access);
+  const historical=clamp(f.hist?.best??f.historicalChange??f.changeScore??0);
+  const vehicle=clamp(f.vehicleEvidence?.score??f.veh?.detectionScore??0);
+  const evidenceConfidence=Math.round(historical*.55+vehicle*.45);
+  f.evidenceConfidence=evidenceConfidence;
+  f.priority=Math.min(100,Math.round(access*.42+historical*.38+evidenceConfidence*.20));
+  f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
+  return f;
+};
+function captureHistoricalReleases(){
+  const old=window.histScan;
+  if(typeof old!=='function'||old.__aquaReleaseCapture)return;
+  const w=async function(f,...args){window.__aquaReleases=args[0]||[];return old.apply(this,arguments)};
+  w.__aquaReleaseCapture=true;
+  window.histScan=w;
+}
 async function runV16(original){
   if(typeof original!=='function')return;
   await original();
