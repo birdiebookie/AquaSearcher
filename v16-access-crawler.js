@@ -190,13 +190,13 @@ function addAccessMarker(a){
   m.bindPopup(`<b>🚤 ${label}</b><br>${a.type||'access'} · ${a.source||''}`);m.addTo(accessLayer);
 }
 function accessFinding(a){
-  const access=accessPriority(a),anomaly=45,priority=Math.round(access*.68+anomaly*.32);
+  const access=accessPriority(a),anomaly=0,priority=Math.round(access*.70);
   const f={
     id:'access-'+a.source+'-'+a.sourceId+'-'+a.lat.toFixed(5)+'-'+a.lng.toFixed(5),
     name:(a.name||'')?`🚤 ${a.name}`:(a.type==='road-end'?'🛣️ ROAD END AT WATER':a.type==='road-shore-approach'?'🛣️ ROAD / SHORE APPROACH':'🚤 WATER ACCESS POINT'),
     lat:a.lat,lng:a.lng,access,anomaly,priority,label:priority>=80?'HIGH':priority>=55?'MEDIUM':'LOW',
     accessPoint:true,accessType:a.type,source:a.source,sourceId:a.sourceId,roadType:a.roadType||'',waterDistance:a.waterDistance||0,
-    histAccess:{score:access,status:'Access-point corridor selected for historical search'},
+    histAccess:{score:access,status:'Access-point corridor selected for historical search'},historicalChange:0,objectScore:0,
     corridor:a.corridor,
     changeScore:anomaly,change:'Access-point search target — historical imagery will be checked along entry corridor.'
   };
@@ -247,7 +247,8 @@ async function scanAccessCandidate(f,releases){
     }
   }
   f.vehicleEvidence={score:0,status:'Vehicle model will be run separately on this access corridor'};
-  f.historicalChange=best;f.changeScore=Math.max(f.changeScore||0,best);
+  f.historicalChange=best;f.changeScore=best;f.anomaly=0;
+  if(typeof window.aquaScoreFinding==='function')window.aquaScoreFinding(f);
   f.evidenceConfidence=Math.min(100,Math.round((f.access*.45)+(best*.35)+(hits?20:0)));
   f.priority=Math.min(100,Math.round(f.access*.42+best*.38+f.evidenceConfidence*.20));
   f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
@@ -258,11 +259,16 @@ async function scanAccessCandidate(f,releases){
 window.aquaScoreFinding=function(f){
   const clamp=v=>Math.max(0,Math.min(100,Number(v)||0));
   const access=clamp(f.access);
-  const historical=clamp(f.hist?.best??f.historicalChange??f.changeScore??0);
-  const vehicle=clamp(f.vehicleEvidence?.score??f.veh?.detectionScore??0);
-  const evidenceConfidence=Math.round(historical*.55+vehicle*.45);
-  f.evidenceConfidence=evidenceConfidence;
-  f.priority=Math.min(100,Math.round(access*.42+historical*.38+evidenceConfidence*.20));
+  const historical=clamp(f.hist?.heroScore??f.hist?.best??f.historicalChange??f.changeScore??0);
+  const vehicle=clamp(f.vehicleEvidence?.score??f.veh?.detectionScore??f.objectScore??0);
+  f.historicalChange=historical;
+  f.objectScore=vehicle;
+  f.evidenceConfidence=Math.round(historical*.55+vehicle*.45);
+  // Keep three evidence channels separate: access/relevance, historical change,
+  // and actual vehicle/object detections. Historical change alone never creates
+  // a HIGH or HERO object finding.
+  f.priority=Math.min(100,Math.round(access*.45+historical*.30+vehicle*.25));
+  if($('deprioritize')?.checked&&access<25)f.priority=Math.min(f.priority,35);
   f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
   return f;
 };
