@@ -56,6 +56,54 @@ initMap();
 function setPin(lat,lng,keepInput){fallbackMap(lat,lng);if(!initMap()){if(!keepInput)$('loc').value=lat.toFixed(6)+', '+lng.toFixed(6);return}if(pin)map.removeLayer(pin);pin=L.marker([lat,lng],{draggable:true,riseOnHover:true,autoPan:true,zIndexOffset:10000,bubblingMouseEvents:false,icon:L.divIcon({className:'aqua-drag-pin',html:'<div style="width:38px;height:38px;border-radius:50% 50% 50% 0;background:#d71920;border:4px solid #fff;box-shadow:0 2px 8px #0008;transform:rotate(-45deg);position:relative"><span style="position:absolute;left:10px;top:10px;width:10px;height:10px;border-radius:50%;background:#fff"></span></div>',iconSize:[38,38],iconAnchor:[19,38]})}).addTo(map);if(pin.dragging)pin.dragging.enable();pin.bindPopup('<b>SEARCH PIN</b><br><b>DRAG THIS RED PIN</b> to reposition').openPopup();pin.on('mousedown touchstart',()=>{if(pin.dragging&&!pin.dragging.enabled())pin.dragging.enable()});pin.on('dragstart',()=>{$('mapmsg').textContent='Drag the red search pin to the new location';$('mapmsg').style.display='block'});pin.on('drag',()=>{updateCircle()});pin.on('dragend',()=>{updateCircle();const p=pin.getLatLng();$('loc').value=p.lat.toFixed(6)+', '+p.lng.toFixed(6);$('mapmsg').textContent='Search pin moved — press START SLOW CRAWL to search the new area';});updateCircle();map.setView([lat,lng],14);if(!keepInput)$('loc').value=lat.toFixed(6)+', '+lng.toFixed(6)}
 function updateCircle(){if(!pin||!map)return;const p=pin.getLatLng(),r=+$('radius').value*1609.344;if(circle)map.removeLayer(circle);circle=L.circle(p,{radius:r,color:'#168ee8',weight:2,fillOpacity:.05}).addTo(map)}
 $('radius').onchange=updateCircle;
+// Robust mouse/touch drag fallback: if Leaflet's native marker drag is intercepted,
+// grabbing within 55px of the search pin will move the pin directly with the map.
+(function installPinDragFallback(){
+  if(window.__aquaPinDragFallback)return;
+  window.__aquaPinDragFallback=true;
+  let dragging=false;
+  function pos(ev){
+    const r=map.getContainer().getBoundingClientRect();
+    const x=(ev.clientX??ev.touches?.[0]?.clientX)-r.left;
+    const y=(ev.clientY??ev.touches?.[0]?.clientY)-r.top;
+    return {x,y};
+  }
+  function down(ev){
+    if(!map||!pin||!pin.getLatLng())return;
+    const p=pos(ev), pp=map.latLngToContainerPoint(pin.getLatLng());
+    if(Math.hypot(p.x-pp.x,p.y-pp.y)>55)return;
+    dragging=true;
+    map.dragging.disable();
+    if(ev.cancelable)ev.preventDefault();
+    if(ev.type==='mousedown')ev.stopPropagation();
+    $('mapmsg').textContent='MOVING SEARCH PIN — release to set the new location';
+    $('mapmsg').style.display='block';
+  }
+  function move(ev){
+    if(!dragging||!map||!pin)return;
+    const p=pos(ev), ll=map.containerPointToLatLng([p.x,p.y]);
+    pin.setLatLng(ll);
+    updateCircle();
+    $('loc').value=ll.lat.toFixed(6)+', '+ll.lng.toFixed(6);
+    if(ev.cancelable)ev.preventDefault();
+  }
+  function up(){
+    if(!dragging)return;
+    dragging=false;
+    if(map)map.dragging.enable();
+    if(pin){const p=pin.getLatLng();$('loc').value=p.lat.toFixed(6)+', '+p.lng.toFixed(6)}
+    $('mapmsg').textContent='Search pin moved — press START SLOW CRAWL to search the new area';
+    $('mapmsg').style.display='block';
+  }
+  const el=()=>map?.getContainer?.();
+  document.addEventListener('mousedown',down,true);
+  document.addEventListener('mousemove',move,true);
+  document.addEventListener('mouseup',up,true);
+  document.addEventListener('touchstart',down,{capture:true,passive:false});
+  document.addEventListener('touchmove',move,{capture:true,passive:false});
+  document.addEventListener('touchend',up,true);
+})();
+
 async function geocode(){const raw=$('loc').value.trim(),c=coord(raw);if(c){coordinateSearch=true;setPin(c.lat,c.lng,true);toast('Coordinates accepted directly.');return c}coordinateSearch=false;let q=raw,st=$('state').value;if(st&&!q.toUpperCase().endsWith(st))q+=', '+st;const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(q);const r=await fetch(u,{headers:{'Accept-Language':'en'}});if(!r.ok)throw Error('Location service returned HTTP '+r.status);const d=await r.json();if(!d.length)throw Error('Location not found');const lat=+d[0].lat,lng=+d[0].lon;setPin(lat,lng);toast('Location found.');return{lat,lng}}
 $('find').onclick=async()=>{try{await geocode()}catch(e){console.error(e);toast(e.message)}};
 $('myloc').onclick=()=>{if(!navigator.geolocation){toast('Location services are not available in this browser.');return}toast('Getting your current location…');navigator.geolocation.getCurrentPosition(p=>{coordinateSearch=true;setPin(p.coords.latitude,p.coords.longitude);toast('Current location loaded.')},e=>toast('Could not get your location: '+(e.message||'permission denied')),{enableHighAccuracy:true,timeout:10000,maximumAge:30000})};
