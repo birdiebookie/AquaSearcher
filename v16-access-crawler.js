@@ -302,13 +302,18 @@ async function runV16(original){
   }catch(e){console.error('V16 access crawler',e);setProgress(100,'V16 access crawl completed with some source limitations.');toast('V16 access crawl hit a data-source limitation; existing results were preserved.')}
 }
 
-window.addEventListener('load',()=>{captureHistoricalReleases();
+function installStart(){
+  captureHistoricalReleases();
   const old=window.run;
-  if(typeof old==='function'&&!window.__v16Wrapped){
+  const btn=$('start');
+  if(typeof old==='function'&&btn&&!window.__v16Wrapped){
     window.__v16Wrapped=true;
     window.__aquaOriginalRun=old;
-    if($('start'))$('start').onclick=()=>runV16(old);
+    btn.onclick=async()=>{try{await runV16(old)}catch(e){console.error('AquaSearcher start failed',e);toast('Search could not start: '+(e?.message||e))}};
   }
   const logo=document.querySelector('.logo small');if(logo)logo.textContent='V16';
-});
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installStart);
+else installStart();
+window.addEventListener('load',installStart);
 })();
