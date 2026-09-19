@@ -29,11 +29,15 @@ function decorate(){
   const used=new Set();
   for(const card of cs){
     if(card.querySelector('[data-earth-link]'))continue;
-    const text=(card.innerText||'').toLowerCase();
-    const score=(text.match(/(?:priority|score)\s*(?:[: ]\s*)?(\d+)\s*\/\s*100/i)||[])[1];
-    let f=fs.find(x=>!used.has(x)&&x.name&&text.includes(String(x.name).toLowerCase().replace(/^🚤\s*/,''))&&(!score||+x.priority===+score));
-    if(!f&&score)f=fs.find(x=>!used.has(x)&&+x.priority===+score);
-    if(!f)f=fs.find(x=>!used.has(x));
+    const directId=card.dataset.findingId||card.getAttribute('data-finding-id');
+    let f=directId?fs.find(x=>String(x.id)===String(directId)):null;
+    if(!f){
+      const text=(card.innerText||'').toLowerCase();
+      const score=(text.match(/(?:priority|score)\s*(?:[: ]\s*)?(\d+)\s*\/\s*100/i)||[])[1];
+      f=fs.find(x=>!used.has(x)&&x.name&&text.includes(String(x.name).toLowerCase().replace(/^🚤\s*/,''))&&(!score||+x.priority===+score));
+      if(!f&&score)f=fs.find(x=>!used.has(x)&&+x.priority===+score);
+      if(!f)f=fs.find(x=>!used.has(x));
+    }
     if(f){used.add(f);addLink(card,f)}
   }
 }
