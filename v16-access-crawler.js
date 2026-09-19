@@ -302,7 +302,7 @@ async function runV16(original){
   }catch(e){console.error('V16 access crawler',e);setProgress(100,'V16 access crawl completed with some source limitations.');toast('V16 access crawl hit a data-source limitation; existing results were preserved.')}
 }
 
-window.addEventListener('load',()=>{
+window.addEventListener('load',()=>{captureHistoricalReleases();
   const old=window.run;
   if(typeof old==='function'&&!window.__v16Wrapped){
     window.__v16Wrapped=true;
