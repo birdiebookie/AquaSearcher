@@ -10,6 +10,8 @@ function stats(canvas){
 }
 async function scan(f,releases){
  if(!f||!releases?.length||typeof window.tile!=='function'||typeof window.img!=='function')return null;
+ const gate=$('access');
+ if(gate&&!gate.checked){f.histAccess={score:0,status:'Historical access screening disabled (checkbox unchecked)',note:'Enable "Analyze current AND historical access points" to run this scan.'};return f.histAccess;}
  const lat=+f.lat,lng=+f.lng;if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
  const rs=releases.length<=8?releases:[releases[0],releases[Math.floor(releases.length*.2)],releases[Math.floor(releases.length*.4)],releases[Math.floor(releases.length*.6)],releases[Math.floor(releases.length*.8)],releases[releases.length-1]];
  const newest=rs[rs.length-1],points=[];
@@ -18,8 +20,11 @@ async function scan(f,releases){
  for(let ri=0;ri<rs.length;ri++){const rel=rs[ri];if($('scan'))$('scan').textContent=`Historical access screening: ${rel.date} · ${ri+1}/${rs.length}`;for(const p of points)try{const s=stats(await window.img(window.tile(rel,p.lat,p.lng,18)));if(s)rows.push({date:rel.date,bearing:p.bearing,m:p.m,score:Math.min(100,Math.round(s.edge*.65+s.texture*.35+(s.mean>70&&s.mean<205?20:0))),stats:s});}catch(e){}}
  const dirs=[];for(let bearing=0;bearing<360;bearing+=45){const a=rows.filter(x=>x.bearing===bearing),old=a.filter(x=>x.date!==newest.date),recent=a.filter(x=>x.date===newest.date).reduce((v,x)=>Math.max(v,x.score),0);if(!old.length)continue;const top=old.sort((x,y)=>y.score-x.score).slice(0,3),oldAvg=top.reduce((v,x)=>v+x.score,0)/top.length,score=Math.round(Math.max(0,Math.min(100,oldAvg-recent*.55)));if(score>=18)dirs.push({bearing,score,oldPeak:Math.round(oldAvg),recentPeak:recent,periods:top.map(x=>x.date)});}
  dirs.sort((a,b)=>b.score-a.score);const repeated=new Set(dirs.flatMap(x=>x.periods||[])).size,best=dirs[0]||null;
- f.histAccess={scannedReleases:rs.map(x=>x.date),sampleCount:rows.length,candidates:dirs.slice(0,8),best,historicalPeriods:repeated,score:best?Math.min(100,Math.round(best.score+Math.min(25,repeated*5))):0,status:best?'Possible historical access signature detected — review imagery':'No strong historical access signature detected by automated screening',note:'This searches historical imagery for possible former approach corridors and ramp-like access. It cannot prove a road or ramp; vegetation, shadows, water level, image quality and shoreline change can hide access.'};
- const oldAccess=f.access||0,a=f.histAccess.score||0;f.access=Math.round(Math.min(100,a*.65+oldAccess*.35));f.priority=Math.round((f.anomaly||0)*.55+f.access*.45);f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';return f.histAccess;
+ f.histAccess={scannedReleases:rs.map(x=>x.date),sampleCount:rows.length,candidates:dirs.slice(0,8),best,historicalPeriods:repeated,score:best?Math.min(100,Math.round(best.score+Math.min(25,repeated*5))):0,status:best?'Possible historical access signature detected — review imagery':'No strong historical access signature detected by automated screening',note:'This searches historical imagery for possible former approach corridors and ramp-like access. It cannot prove a road or ramp; vegetation, shadows, water level, image quality and shoreline change can hide access. Treat this as a weaker, unverified signal — mapped current access (roads, ramps, docks) is stronger evidence and is weighted more heavily below.'};
+ // V16 keeps Access, Historical Change, and Object evidence separate. The V16
+ // scorer incorporates histAccess as a secondary access-evidence component.
+ if(typeof window.aquaScoreFinding==='function')window.aquaScoreFinding(f);
+ return f.histAccess;
 }
 const oldHist=window.histScan;
 if(typeof oldHist==='function')window.histScan=async function(f,rs,silent,fast){const out=await oldHist(f,rs,silent,fast);try{await scan(f,rs||[])}catch(e){console.error('V15 historical access',e)}if(typeof window.render==='function')window.render();return out;};
