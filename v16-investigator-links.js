@@ -1,9 +1,9 @@
 /* AquaSearcher V16.4 investigator links.
-   Any finding at priority >= 60 gets exact coordinates and a one-click
+   Every valid mapped finding gets exact coordinates and a one-click
    Google Earth Web link so an investigator/diver can go directly to it. */
 (function(){
 'use strict';
-const THRESHOLD=60;
+const THRESHOLD=0;
 function earthUrl(lat,lng){return `https://earth.google.com/web/@${lat},${lng},500a,1200d,35y,0h,0t,0r`}
 function validPoint(f){return f&&Number.isFinite(+f.lat)&&Number.isFinite(+(f.lng??f.lon))}
 function addLink(card,f){
