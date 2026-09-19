@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const THRESHOLD=60;
-function earthUrl(lat,lng){return `https://earth.google.com/web/search/${encodeURIComponent(lat+','+lng)}/`}
+function earthUrl(lat,lng){return `https://earth.google.com/web/@${lat},${lng},500a,1200d,35y,0h,0t,0r`}
 function validPoint(f){return f&&Number.isFinite(+f.lat)&&Number.isFinite(+(f.lng??f.lon))}
 function addLink(card,f){
   if(!card||!validPoint(f)||(+f.priority||0)<THRESHOLD)return;
@@ -14,7 +14,7 @@ function addLink(card,f){
   box.dataset.earthLink='1';
   box.style.cssText='margin-top:8px;padding-top:7px;border-top:1px solid #d7e2ea;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
   const changeYear=f?.hist?.changeEstablished&&f?.hist?.changeYear?String(f.hist.changeYear):'';
-  box.innerHTML=`<div style="width:100%;padding:8px;background:#fff4bf;border:2px solid #eab308;border-radius:7px"><div style="font-size:10px;font-weight:900;color:#765b00;letter-spacing:.4px">🚨 YEAR OF CHANGE DETECTED</div><div style="font-size:24px;font-weight:900;color:#06243a;line-height:1.05">${changeYear}</div><div style="font-size:10px;font-weight:900;color:#765b00;margin-top:4px">New localized anomaly detected in the later release.</div></div><span style="font-size:11px;font-weight:900;color:#284b5e">📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}</span><a href="${earthUrl(lat,lng)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;font-weight:900;color:#168ee8;text-decoration:none">🌎 OPEN IN GOOGLE EARTH ↗</a>`;
+  box.innerHTML=`<div style="width:100%;padding:8px;background:#fff4bf;border:2px solid #eab308;border-radius:7px"><div style="font-size:10px;font-weight:900;color:#765b00;letter-spacing:.4px">🚨 YEAR OF CHANGE DETECTED</div><div style="font-size:24px;font-weight:900;color:#06243a;line-height:1.05">${changeYear}</div><div style="font-size:10px;font-weight:900;color:#765b00;margin-top:4px">New localized anomaly detected in the later release.</div></div><span style="font-size:11px;font-weight:900;color:#284b5e">📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}</span><a href="${earthUrl(lat,lng)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;font-weight:900;color:#168ee8;text-decoration:none">🌎 OPEN EXACT COORDINATE IN GOOGLE EARTH ↗</a>`;
   card.appendChild(box);
 }
 function candidates(){
