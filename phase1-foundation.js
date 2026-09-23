@@ -30,28 +30,33 @@ function scoreReason(f){
  return r.length?r:['screening evidence pending'];
 }
 function waterSuitability(f){
- const s0=65,type=String(f.ftype||'').toLowerCase(),name=String(f.name||'').toLowerCase();
- let s=s0;
- if(/stream|river|canal|ditch|drain|waterway/.test(type))s-=25;
+ const type=String(f.ftype||'').toLowerCase(),name=String(f.name||'').toLowerCase();
+ let s=65;
+ if(/stream|river|canal|ditch|drain|waterway/.test(type))s-=22;
  if(/canal|ditch|drain|fountain|pool|swimming|ornamental|decorative/.test(name+' '+type))s-=35;
- if(Number.isFinite(f.waterWidthFt)){if(f.waterWidthFt<25)s-=50;else if(f.waterWidthFt<40)s-=25;else if(f.waterWidthFt>=75)s+=15}
+ if(Number.isFinite(f.waterWidthFt)){if(f.waterWidthFt<25)s-=55;else if(f.waterWidthFt<40)s-=25;else if(f.waterWidthFt>=100)s+=15;else if(f.waterWidthFt>=60)s+=8}
+ if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=1)s+=12;else if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=.05)s+=6;
+ if(/lake|reservoir|pond|harsha/.test(name))s+=12;
+ if(/river/.test(name)&&!(/stream/.test(name)))s+=6;
  if((f.access||0)>75)s+=10;
- if(f.nearPin)s+=5;
  return Math.max(0,Math.min(100,Math.round(s)));
 }
 function usableWater(f){
- if(!f||f.isPinTest)return true;
+ if(!f||f.isPinTest)return false;
  const type=String(f.ftype||'').toLowerCase(),name=String(f.name||'').toLowerCase();
- if(/fountain|swimming pool|ornamental pond|decorative pond/.test(name))return false;
+ if(/fountain|swimming pool|ornamental pond|decorative pond|splash pad|drinking water|water point|watering place/.test(name))return false;
  if(/canal|ditch|drainageway/.test(name+' '+type)&&(f.access||0)<75)return false;
  if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<25)return false;
- if(/streamriver|stream|canal/.test(type)&&Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<40&&(f.access||0)<80)return false;
+ const minor=/^stream$|^canal$|^ditch$|^drain$/.test(type)||f._flowline;
+ const namedMajor=/lake|reservoir|pond|harsha|river/.test(name);
+ const area=Number(f.waterAreaSqKm||f.areaSqKm||0);
+ if(minor && !namedMajor && area<.02 && (f.access||0)<80)return false;
  return true;
 }
 function dedupeWater(arr){
  const kept=[];
  for(const f of arr){
-  const dup=kept.find(k=>distFt(f,k)<=175&&((f.name&&k.name&&f.name===k.name)||String(f.ftype)===String(k.ftype)||f.nearPin||k.nearPin));
+  const dup=kept.find(k=>distFt(f,k)<=175&&((f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase())||(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId))));
   if(!dup){kept.push(f);continue}
   const winner=(f.priority||0)>(dup.priority||0)?f:dup,loser=winner===f?dup:f;
   winner.groupedCount=(winner.groupedCount||1)+(loser.groupedCount||1);
@@ -158,7 +163,7 @@ function phase1Process(){
  if(!Array.isArray(arr)||!arr.length)return false;
  const pin=arr.find(x=>x?.isPinTest),mapped=arr.filter(x=>x&&!x.isPinTest&&!x.accessPoint);
  const filtered=mapped.filter(usableWater),grouped=dedupeWater(filtered);
- if(pin)grouped.unshift(pin);
+ window.__aquaPinTest=pin||null;
  grouped.forEach(f=>{
   recalc(f);
   // A raw imagery change is not a vehicle/object finding by itself.
@@ -187,7 +192,7 @@ function phase1Process(){
  applyMapColors();
  setTimeout(()=>{decorateAll();renderAccessPhase1(window.aquaV16Access||[]);applyMapColors()},80);
  const removed=mapped.length-filtered.length;
- if($('status'))$('status').textContent='Phase 1 complete — '+grouped.length+' water candidates after filtering/grouping'+(removed?' · '+removed+' low-utility water features removed':'')+'.';
+ if($('status'))$('status').textContent='Phase 1 complete — '+grouped.length+' mapped water candidates after filtering/grouping'+(removed?' · '+removed+' low-utility water features removed':'')+'.'+(pin?' Exact-pin test kept separate.':'');
  return true;
 }
 async function recoverOldFailure(){
@@ -224,6 +229,22 @@ function install(){
   b.style.cssText='font-size:10px;color:#b9e7ff;margin-left:auto;opacity:.9';header.appendChild(b);
  }
 }
-window.addEventListener('load',()=>setTimeout(install,1200));
+function wrapEvidenceScans(){
+ if(window.__phase1EvidenceWrapped)return;
+ window.__phase1EvidenceWrapped=true;
+ const wrap=(name)=>{
+  const old=window[name];
+  if(typeof old!=='function')return;
+  window[name]=async function(...args){
+   const out=await old.apply(this,args);
+   try{phase1Process()}catch(e){console.warn('Phase 1 evidence finalize',e)}
+   return out;
+  };
+ };
+ wrap('histScan');
+ wrap('vehicleScan');
+}
+window.addEventListener('load',()=>{setTimeout(install,1200);setTimeout(wrapEvidenceScans,1600)});
 setTimeout(install,1800);
+setTimeout(wrapEvidenceScans,2200);
 })();
