@@ -114,11 +114,26 @@ function renderAccessPhase1(list){
  });
  host.prepend(wrap);
 }
+function drawPhase1Markers(){
+ if(typeof L==='undefined'||!resultLayer)return;
+ resultLayer.clearLayers();
+ const list=(window.__aquaFindings||[]).filter(f=>f&&!f.isPinTest&&!f.accessPoint);
+ list.sort((a,b)=>(b.priority||0)-(a.priority||0));
+ list.slice(0,60).forEach((f,i)=>{
+   const color=i<3?'#19a974':((f.priority||0)>75?'#e5484d':'#eab308');
+   const m=L.marker([f.lat,f.lng],{icon:L.divIcon({
+     className:'',
+     html:'<div style="width:26px;height:26px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 1px 5px #555;text-align:center;line-height:20px;font-weight:900;color:#06243a;font-size:11px">'+(i+1)+'</div>',
+     iconSize:[26,26],iconAnchor:[13,13]
+   })});
+   m.bindTooltip('#'+(i+1)+' · '+(f.name||'Water candidate'));
+   m.on('click',()=>{if(typeof selectF==='function')selectF(f.id)});
+   m.addTo(resultLayer);
+ });
+}
 function applyMapColors(){
  window.__phase1MapColors=true;
- if(typeof window.redraw==='function')window.redraw();
- // redraw is a lexical function in index.html, so call it indirectly through
- // the public helper when available; the flag is also honored by base mark().
+ drawPhase1Markers();
 }
 function normalizeAccessList(list){
  return (list||[]).map(x=>{
