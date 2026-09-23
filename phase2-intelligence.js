@@ -101,12 +101,12 @@ function hydroName(f){
 }
 function hydroArea(f){
   const a=attrs(f);
-  for(const k of ['AREASQKM','AREA_SQKM','AreaSqKm','AREA_KM2','AREA']){const n=num(a[k]);if(n!=null)return n}
+  for(const k of ['AREASQKM','AREA_SQKM','AreaSqKm','AREA_KM2']){const n=num(a[k]);if(n!=null)return n}
   return null;
 }
 function hydroType(f){
   const a=attrs(f);
-  return String(a.WB_TYPE||a.WATERBODY_TYPE||a.FEATURE||a.FTYPE||f._p2Layer===60?'waterbody':'flowline').toLowerCase();
+  const v=a.WB_TYPE||a.WATERBODY_TYPE||a.FEATURE||a.FTYPE||'';return String(v||(_isWaterbody(f)?'waterbody':'flowline')).toLowerCase();
 }
 function waterClass(f,h){
   const s=(String(f.name||'')+' '+hydroName(h)+' '+String(hydroType(h))).toLowerCase();
@@ -275,7 +275,7 @@ function renderPhase2Evidence(){
 async function runPhase2(manual){
   if(P2.running)return;
   const arr=window.__aquaFindings;
-  const p=window.pin?.getLatLng?.(),r=+$('radius')?.value||1;
+  const p=(typeof pin!=='undefined'&&pin?.getLatLng)?pin.getLatLng():null,r=+$('radius')?.value||1;
   if(!Array.isArray(arr)||!arr.length||!p){
     if(manual)toast('Run the Phase 1 search first.');
     return;
