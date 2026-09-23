@@ -210,6 +210,7 @@ function enrichFinding(f,hydro,bathy,access){
     objectScore:obj,
     bathymetryAvailable:bathyMatches.length>0,
     bathymetryRecords:bathyMatches.length,
+    depthEvidence:bathyMatches.length?'Bathymetry coverage available; exact depth requires the underlying survey/elevation product.':'No USGS bathymetry-inventory coverage found at this screening radius.',
     phase2Score,
     status:'Phase 2 enrichment complete'
   };
@@ -243,7 +244,7 @@ function exportRows(){
     accessScore:f.phase2?.accessScore??f.access??0,accessType:f.phase2?.accessType||f.accessType||'',
     accessDistanceMi:f.phase2?.accessDistanceMi??f.accessDistance??'',historicalScore:f.phase2?.historicalScore??f.hist?.best??0,
     persistence:f.phase2?.historicalPersistence??f.hist?.persistenceCount??0,objectScore:f.phase2?.objectScore??f.objectScore??0,
-    bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO'
+    bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO',depthEvidence:f.phase2?.depthEvidence||''
   }));
 }
 function download(name,type,data){
@@ -268,7 +269,7 @@ function renderPhase2Evidence(){
     d=document.createElement('div');d.className='phase2-evidence small';
     d.style.cssText='margin-top:6px;padding-top:5px;border-top:1px solid #d7e2ea';
     d.innerHTML='<b>Phase 2:</b> '+f.phase2Reasons.join(' · ')+' · <b>Score '+f.phase2.phase2Score+'/100</b>'+
-      (f.phase2.bathymetryAvailable?' · 🗺 bathymetry coverage found':'');
+      (f.phase2.bathymetryAvailable?' · 🗺 bathymetry coverage found':'')+' · Depth: '+f.phase2.depthEvidence;
     card.appendChild(d);
   });
 }
