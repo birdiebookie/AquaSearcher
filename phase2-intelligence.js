@@ -322,6 +322,8 @@ function install(){
     return out;
   };
 }
+const wrapEvidence=(name)=>{const old=window[name];if(typeof old!=='function'||old.__p2wrap)return;const w=async function(...args){const out=await old.apply(this,args);setTimeout(renderPhase2Evidence,50);return out};w.__p2wrap=true;window[name]=w};
+wrapEvidence('histScan');wrapEvidence('vehicleScan');
 window.aquaPhase2={run:runPhase2,downloadCSV,downloadKML,version:'2.0'};
 window.addEventListener('load',()=>setTimeout(install,2600));
 setTimeout(install,3200);
