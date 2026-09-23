@@ -110,7 +110,7 @@ function renderAccessPhase1(list){
   const d=document.createElement('div');d.className='card';
   d.innerHTML='<span class="pill">'+(f.type||'access')+'</span><b>'+String(f.name||'WATER ACCESS POINT')+'</b>'+
    '<div class="small">'+(f.source||'mapped source')+' · Access '+(f.access||0)+'/100'+(f.accessDistance!=null?' · '+Math.round(f.accessDistance*FEET)+' ft from candidate':'')+'</div>'+
-   '<div class="phase1-evidence small"><b>Official/mapped access evidence.</b> '+scoreReason(f).slice(0,2).join(' · ')+'</div>';
+   '<div class="phase1-evidence small"><b>Current mapped access evidence only.</b> '+scoreReason(f).slice(0,2).join(' · ')+'</div>';
   wrap.appendChild(d);
  });
  host.prepend(wrap);
@@ -121,16 +121,36 @@ function applyMapColors(){
  // redraw is a lexical function in index.html, so call it indirectly through
  // the public helper when available; the flag is also honored by base mark().
 }
+function normalizeAccessList(list){
+ return (list||[]).map(x=>{
+  if(!x)return null;
+  if(x.accessPoint){
+   return {
+    lat:+x.lat,lng:+x.lng,
+    type:x.accessType||'access',
+    source:x.source||'mapped source',
+    sourceId:x.sourceId||null,
+    name:String(x.name||'').replace(/^🚤\\s*/,'')||'WATER ACCESS POINT',
+    access:Number(x.access)||0,
+    boost:Number(x.access)||0,
+    accessDistance:Number.isFinite(Number(x.waterDistance))?Number(x.waterDistance)/5280:null
+   };
+  }
+  return x;
+ }).filter(x=>x&&Number.isFinite(x.lat)&&Number.isFinite(x.lng));
+}
 function phase1Process(){
  const arr=window.__aquaFindings;
  if(!Array.isArray(arr)||!arr.length)return false;
- const pin=arr.find(x=>x?.isPinTest),mapped=arr.filter(x=>x&&!x.isPinTest);
+ const pin=arr.find(x=>x?.isPinTest),mapped=arr.filter(x=>x&&!x.isPinTest&&!x.accessPoint);
  const filtered=mapped.filter(usableWater),grouped=dedupeWater(filtered);
  if(pin)grouped.unshift(pin);
  grouped.forEach(recalc);
  arr.splice(0,arr.length,...grouped);
  if(Array.isArray(window.aquaV16Access)){
-  const access=dedupeAccess(window.aquaV16Access);access.forEach(recalc);window.aquaV16Access=access;
+  const access=dedupeAccess(normalizeAccessList(window.aquaV16Access));
+  access.forEach(recalc);
+  window.aquaV16Access=access;
  }
  grouped.sort((a,b)=>(b.priority||0)-(a.priority||0));
  if(typeof window.render==='function')window.render();
