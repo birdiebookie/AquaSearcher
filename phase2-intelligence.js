@@ -125,7 +125,7 @@ function nearestHydro(f,hydro){
     const p=featurePoint(h);if(!p)continue;
     const d=miles(f.lat,f.lng,p.lat,p.lng);
     const sameName=f.name&&hydroName(h)&&String(f.name).toLowerCase()===hydroName(h).toLowerCase();
-    const limit=sameName?.25:.08;
+    const limit=sameName ? 0.25 : 0.08;
     if(d<=limit&&d<bd){bd=d;best=h}
   }
   return{best,distance:best?bd:null}
