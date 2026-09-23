@@ -136,7 +136,7 @@ function nearestAccess(f,list){
     const p=a.accessPoint?{lat:+a.lat,lng:+a.lng}:a;
     if(!p||!Number.isFinite(p.lat)||!Number.isFinite(p.lng))continue;
     const d=miles(f.lat,f.lng,p.lat,p.lng);
-    if(d<bd){bd=d;best:a}
+    if(d<bd){bd=d;best=a}
   }
   return{best,distance:best?bd:null}
 }
@@ -310,16 +310,16 @@ function install(){
     b.style.cssText='font-size:10px;color:#b9e7ff;margin-left:8px;opacity:.9';header.appendChild(b)
   }
   if(window.__aquaPhase2Auto)return;
+  const start=$('start');
+  if(!start||typeof start.onclick!=='function')return;
   window.__aquaPhase2Auto=true;
-  const oldRun=window.run;
-  if(typeof oldRun==='function'){
-    window.run=async function(...args){
-      const out=await oldRun.apply(this,args);
-      await new Promise(r=>setTimeout(r,150));
-      if(window.state!=='searching')await runPhase2(false);
-      return out;
-    };
-  }
+  const oldClick=start.onclick;
+  start.onclick=async function(...args){
+    const out=await oldClick.apply(this,args);
+    await new Promise(r=>setTimeout(r,150));
+    await runPhase2(false);
+    return out;
+  };
 }
 window.aquaPhase2={run:runPhase2,downloadCSV,downloadKML,version:'2.0'};
 window.addEventListener('load',()=>setTimeout(install,2600));
