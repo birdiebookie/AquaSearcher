@@ -138,6 +138,7 @@ function accPoint(e){
   else if(t.leisure==='marina'){type='marina';boost=32}
   else if(t.bridge==='yes'){type='bridge';boost=18}
   else if(/boat|ramp|launch|slipway|dock|pier|marina|water access/i.test(name)){type='named water access';boost=22}
+  if(type==='road')return null;
   return{lat:+lat,lng:+lng,type,boost,name,source,sourceId};
 }
 async function getAccess(p,r){
@@ -157,10 +158,11 @@ async function getAccess(p,r){
   }catch(e){console.warn('OSM access query failed',e)}
   if($('state')?.value==='OH'||(p.lat>38.3&&p.lat<42.1&&p.lng>-85.0&&p.lng<-80.3)){
     try{
+      const dlat=r/69,dlng=r/(69*Math.max(.15,Math.cos(p.lat*Math.PI/180)));
+      const env=(p.lng-dlng)+','+(p.lat-dlat)+','+(p.lng+dlng)+','+(p.lat+dlat);
       const u='https://gis2.ohiodnr.gov/ArcGIS/rest/services/DWC_Services/Watercraft_Paddling_Draw/MapServer/17/query'
-        +'?where=1%3D1&geometry='+encodeURIComponent(p.lng+','+p.lat)
-        +'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects'
-        +'&distance='+(r*1609.34)+'&units=esriSRUnit_Meter'
+        +'?where=1%3D1&geometry='+encodeURIComponent(env)
+        +'&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects'
         +'&outFields=LAT,LONG_,FEATURE,WATERWAY,LAUNCHRAMP,OBJECTID&returnGeometry=true&outSR=4326&f=json';
       const j=await fetch(u,{signal:AbortSignal.timeout(12000)}).then(x=>x.json());
       for(const f of j.features||[])out.push({_odnr:true,attributes:f.attributes||{},geometry:f.geometry||null,tags:{}});
@@ -168,9 +170,8 @@ async function getAccess(p,r){
     try{
       const u='https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/Ohio_POI/MapServer/0/query'
         +'?where='+encodeURIComponent("RuleID IN (198,196,200,51,59,60,61,62)")
-        +'&geometry='+encodeURIComponent(p.lng+','+p.lat)
-        +'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects'
-        +'&distance='+(r*1609.34)+'&units=esriSRUnit_Meter'
+        +'&geometry='+encodeURIComponent(env)
+        +'&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects'
         +'&outFields=POI_NAME,RuleID,LANDS_NAME,LAT,LONG&returnGeometry=true&outSR=4326&f=json';
       const j=await fetch(u,{signal:AbortSignal.timeout(12000)}).then(x=>x.json());
       for(const f of j.features||[])out.push({_odnrPoi:true,attributes:f.attributes||{},geometry:f.geometry||null,tags:{}});
