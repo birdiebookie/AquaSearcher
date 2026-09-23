@@ -79,10 +79,9 @@ function dedupeAccess(arr){
 function recalc(f){
  f.waterSuitability=waterSuitability(f);
  const access=Number(f.access)||0,hist=Number(f.hist?.best)||0,vehicle=f.veh?.best?Math.round((Number(f.veh.best.confidence)||0)*100):0;
- const pin=f.isPinTest?90:(f.nearPin?70:0);
- f.priority=Math.max(0,Math.min(100,Math.round(access*.40+hist*.30+vehicle*.15+f.waterSuitability*.10+pin*.05)));
- if(f.isPinTest)f.priority=Math.max(f.priority,70);
- f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
+ const pin=f.isPinTest?0:(f.nearPin?70:0);
+ f.priority=f.isPinTest?20:Math.max(0,Math.min(100,Math.round(access*.40+hist*.30+vehicle*.15+f.waterSuitability*.10+pin*.05)));
+ f.label=f.isPinTest?'TEST':f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
  f.scoring={access:40,historical:30,object:15,waterSuitability:10,location:5,note:'Phase 1 screening score; access and historical evidence lead.'};
  f.scoreReasons=scoreReason(f);
  return f;
