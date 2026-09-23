@@ -22,19 +22,16 @@
     f.anomaly=adjusted;f.priority=Math.round(adjusted*.65+(f.access||0)*.35);if(f.isPinTest)f.priority=Math.max(70,f.priority);f.label=f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';return result;
   };
   const originalVehicleScan=window.vehicleScan;
-  if(typeof originalVehicleScan==='function')window.vehicleScan=async function(f,rs,silent){
-    if(typeof cocoSsd==='undefined')throw Error('Vehicle detector library unavailable');
-    if(!window.coco)window.coco=await cocoSsd.load({base:'lite_mobilenet_v2'});
-    const use=(rs||[]).length<=10?(rs||[]):[rs[0],rs[Math.floor(rs.length*.25)],rs[Math.floor(rs.length*.5)],rs[Math.floor(rs.length*.75)],rs[rs.length-1]];
-    const base=(f.samples||[{lat:f.lat,lng:f.lng}]).slice(0,9),hits=[];
-    for(let i=0;i<use.length;i++){
-      if(q('pause')?.textContent?.includes('RESUME'))await sleep(250);
-      if(q('scan'))q('scan').textContent=`Vehicle/object screening: ${use[i].date} · ${i+1}/${use.length}`;
-      for(const p of base)try{const d=await coco.detect(await window.img(window.tile(use[i],p.lat,p.lng,18)));d.filter(o=>['car','truck','boat','bus','motorcycle'].includes(o.class)&&o.score>=.20).forEach(o=>hits.push({label:o.class,confidence:o.score,year:use[i].date,lat:p.lat,lng:p.lng}))}catch(e){}
-    }
-    hits.sort((a,b)=>b.confidence-a.confidence);f.veh={hits,best:hits[0]||null,releases:use.map(x=>x.date),samplePoints:base.length,detected:hits.length>0,status:hits.length?'Automated object candidate detected':'No conventional vehicle object detected by automated screening; this does not rule out a vehicle',confidence:hits[0]?Math.round(hits[0].confidence*100):0};
-    if(typeof window.render==='function')window.render();if(!silent&&typeof window.showCandidate==='function')window.showCandidate(f);return hits[0]||null;
-  };
+  // Keep the V14 layer from replacing the stricter base detector.
+  // The base detector enforces the 15+ ft size qualification and reports
+  // score/size-qualified evidence used by Phase 1 ranking.
+  if(typeof originalVehicleScan==='function'){
+    window.vehicleScan=async function(f,rs,silent){
+      const result=await originalVehicleScan(f,rs,silent);
+      if(f && !f.objectScore && f.vehicleEvidence?.score!=null) f.objectScore=Number(f.vehicleEvidence.score)||0;
+      return result;
+    };
+  }
   const originalRender=window.render;
   if(typeof originalRender==='function')window.render=function(){originalRender();document.querySelectorAll('.card').forEach(card=>{const old=card.querySelector('.v14evidence');if(old)old.remove();const div=document.createElement('div');div.className='v14evidence small';div.textContent='V14: scores are screening evidence; historical/seasonal imagery effects can create false positives.';card.appendChild(div)})};
   const originalShow=window.showCandidate;
