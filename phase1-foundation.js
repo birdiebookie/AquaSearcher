@@ -145,7 +145,23 @@ function phase1Process(){
  const pin=arr.find(x=>x?.isPinTest),mapped=arr.filter(x=>x&&!x.isPinTest&&!x.accessPoint);
  const filtered=mapped.filter(usableWater),grouped=dedupeWater(filtered);
  if(pin)grouped.unshift(pin);
- grouped.forEach(recalc);
+ grouped.forEach(f=>{
+  recalc(f);
+  // A raw imagery change is not a vehicle/object finding by itself.
+  // Do not promote inaccessible/weak-access water to HERO/YEAR-OF-CHANGE
+  // status unless there is meaningful access evidence or a qualified object hit.
+  const meaningfulAccess=Number(f.access||0)>=30 || ['official','road-end','road-shore-approach'].includes(String(f.accessType||''));
+  const qualifiedObject=Number(f.objectScore||0)>=60 && !!f.veh?.best?.sizeQualified;
+  if(!meaningfulAccess && !qualifiedObject && f.hist){
+    f.heroMoment=false;
+    f.hist.changeEstablished=false;
+    f.hist.changeType='NOT ESTABLISHED';
+    f.hist.changeYear='';
+    f.hist.changeConfidence=0;
+    f.hist.heroScore=0;
+    f.changeScore=0;
+  }
+ });
  arr.splice(0,arr.length,...grouped);
  if(Array.isArray(window.aquaV16Access)){
   const access=dedupeAccess(normalizeAccessList(window.aquaV16Access));
