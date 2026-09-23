@@ -192,7 +192,8 @@ const waterwayType=String(tags.waterway||'').toLowerCase();
 const nameText=String(w.attributes?.GNIS_NAME||tags.name||'').toLowerCase();
 const featureType=String(w.attributes?.FTYPE||'').toLowerCase();
 const isMinorFlowline=!!w._flowline||['stream','ditch','drain','canal'].includes(waterwayType);
-const isMajorWater=/lake|reservoir|pond|harsha|river/.test(nameText+' '+featureType+' '+waterwayType);
+const hasRealName=!!(tags.name||((w.attributes?.GNIS_NAME||'')&&!/^unnamed|unknown|river$/i.test(String(w.attributes?.GNIS_NAME||'').trim())));
+const isMajorWater=/lake|reservoir|pond|harsha/.test(nameText+' '+featureType)|| (waterwayType==='river'&&hasRealName);
 const pd=pin?miles(c.lat,c.lng,pin.getLatLng().lat,pin.getLatLng().lng):999,nearPin=pd<=.2,baseAnomaly=35+($('vehicle').checked?10:0)+($('manmade').checked?8:0);
 if(isMinorFlowline&&!meaningfulAccess&&!isMajorWater)return null;
 let pr=Math.round(as*.70+baseAnomaly*.30);if($('deprioritize').checked&&as<25)pr=Math.min(pr,25);const shoreDistanceFt=w._flowline?null:waterEdgeDistanceFt(c,w);return{id:'water-'+Date.now()+'-'+i,lat:c.lat,lng:c.lng,name:w.attributes?.GNIS_NAME||'Unnamed water feature',ftype:w._osm?'OSM water feature':w.attributes?.FTYPE||'water',waterWidthFt:widthFt,shoreDistanceFt,access:as,accessType:n.best?.type||'none',accessDistance:n.best?n.distance:null,accessDistanceFt:n.best?Math.round(n.distance*5280):null,baseAnomaly,anomaly:0,historicalChange:0,objectScore:0,priority:pr,pinDistance:pd,nearPin,samples:ringSamples(w,c),label:'LOW',why:n.best?n.best.type+' is about '+n.distance.toFixed(2)+' miles away.':'No mapped vehicle access was found nearby; candidate is de-prioritized.'}}
