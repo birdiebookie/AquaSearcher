@@ -48,7 +48,8 @@ function usableWater(f){
  if(/canal|ditch|drainageway/.test(name+' '+type)&&(f.access||0)<75)return false;
  if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<25)return false;
  const minor=/^stream$|^canal$|^ditch$|^drain$/.test(type)||f._flowline;
- const namedMajor=/lake|reservoir|pond|harsha|river/.test(name);
+ const realName=!!(f._osmTags?.name||((f.name||'')&&!/^unnamed|unknown|river$/i.test(String(f.name||'').trim())));
+ const namedMajor=/lake|reservoir|pond|harsha/.test(name)||(/^river$/.test(type)&&realName);
  const area=Number(f.waterAreaSqKm||f.areaSqKm||0);
  if(minor && !namedMajor && area<.02 && (f.access||0)<80)return false;
  return true;
