@@ -13,6 +13,7 @@ on:
       - 'v16-login.js'
       - 'phase1-foundation.js'
       - 'phase2-intelligence.js'
+      - 'phase3-precision.js'
       - '.github/workflows/aquasearcher-v14.yml'
 
 permissions:
@@ -45,6 +46,9 @@ jobs:
               '<script src="historical-evidence.js"></script>',
               '<script src="v15-historical-access.js"></script>',
               '<script src="v16-access-crawler.js"></script>',
+              '<script src="phase1-foundation.js"></script>',
+              '<script src="phase2-intelligence.js"></script>',
+              '<script src="phase3-precision.js"></script>',
               '<script src="v16-investigator-links.js"></script>',
               '<script src="v16-login.js"></script>'
           ]:
@@ -80,11 +84,12 @@ jobs:
           node --check v16-login.js
           node --check phase1-foundation.js
           node --check phase2-intelligence.js
+          node --check phase3-precision.js
       - name: Commit V16
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-bootstrap.js v16-map-hook.js v16-investigator-links.js v16-login.js
+          git add index.html v14-improvements.js v15-historical-access.js historical-evidence.js v16-access-crawler.js v16-map-hook.js v16-investigator-links.js v16-login.js phase1-foundation.js phase2-intelligence.js phase3-precision.js
           if git diff --cached --quiet; then
             echo 'No changes needed.'
             exit 0
