@@ -12,6 +12,8 @@ on:
       - 'v16-map-hook.js'
       - 'v16-investigator-links.js'
       - 'v16-login.js'
+      - 'phase1-foundation.js'
+      - 'phase2-intelligence.js'
       - '.github/workflows/aquasearcher-v14.yml'
 
 permissions:
@@ -79,6 +81,8 @@ jobs:
           node --check v16-map-hook.js
           node --check v16-investigator-links.js
           node --check v16-login.js
+          node --check phase1-foundation.js
+          node --check phase2-intelligence.js
       - name: Commit V16
         run: |
           git config user.name 'github-actions[bot]'
