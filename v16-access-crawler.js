@@ -106,11 +106,12 @@ function minToGeom(p,geom){
 }
 function roadEndCandidates(roads,water,p,r){
   const out=[];
+  const blocked=/^(footway|path|pedestrian|cycleway|bridleway|steps|corridor|platform)$/i;
   for(const rd of roads){
     const g=rd.geometry;const ends=[g[0],g[g.length-1]];
     for(let i=0;i<ends.length;i++){
       const ep={lat:+ends[i].lat,lng:+ends[i].lon};
-      if(!inRadius(ep,p,r))continue;
+      if(!inRadius(ep,p,r)||blocked.test(String(rd.tags.highway||'')))continue;
       let best=1e9;
       for(const w of water)best=Math.min(best,minToGeom(ep,w.geometry||[]));
       if(best<=75){
@@ -124,8 +125,9 @@ function roadEndCandidates(roads,water,p,r){
 }
 function roadApproachCandidates(roads,water,p,r){
   const out=[];
+  const blocked=/^(footway|path|pedestrian|cycleway|bridleway|steps|corridor|platform)$/i;
   for(const rd of roads){
-    const g=rd.geometry;if(g.length<2)continue;
+    const g=rd.geometry;if(g.length<2||blocked.test(String(rd.tags.highway||'')))continue;
     for(let i=0;i<g.length;i+=Math.max(1,Math.floor(g.length/8))){
       const pt={lat:+g[i].lat,lng:+g[i].lon};if(!inRadius(pt,p,r))continue;
       let best=1e9;for(const w of water)best=Math.min(best,minToGeom(pt,w.geometry||[]));
