@@ -123,7 +123,7 @@ async function detectCanvas(src,lat,lng){
     return out;
   }catch(e){return[]}
 }
-async function rowNAIP(p,m,hits,obj){
+async function rowNAIP(p){
   try{
     const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng);
     const key=p.lat.toFixed(5)+','+p.lng.toFixed(5),r=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
@@ -157,7 +157,7 @@ async function run(manual){
         if($('scan'))$('scan').textContent='Phase 3 target search: '+rel.date+' · point '+(pi+1)+'/'+pts.length;
         try{
           const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),obj=localObjectness(m);
-          rowNAIP(p,m,hits,obj);
+          if(ri===0)await rowNAIP(p);
           const key=p.lat.toFixed(5)+','+p.lng.toFixed(5);
           const row=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
           row.years.push(rel.date);row.hits.push(...hits);row.objectness.push(obj);
