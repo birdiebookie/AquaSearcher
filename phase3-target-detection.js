@@ -39,6 +39,17 @@ function around(p,m){
     {lat:p.lat-a,lng:p.lng+z},{lat:p.lat-a,lng:p.lng-z}
   ];
 }
+const NAIP_PLUS='https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage';
+function mercator(lat,lng){
+  const R=6378137, x=R*lng*Math.PI/180;
+  const y=R*Math.log(Math.tan(Math.PI/4+Math.max(-85.05112878,Math.min(85.05112878,lat))*Math.PI/360));
+  return {x,y};
+}
+async function naipPlusImage(p){
+  const m=mercator(p.lat,p.lng), half=115;
+  const url=NAIP_PLUS+'?bbox='+encodeURIComponent((m.x-half)+','+(m.y-half)+','+(m.x+half)+','+(m.y+half))+'&bboxSR=3857&size=768,768&imageSR=3857&format=png&pixelType=U8&interpolation=RSP_Bilinear&f=image';
+  return await image(url);
+}
 function tile19(rel,lat,lng){
   const z=19,n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;
   return(rel.itemURL||'').replace(/\\{level\\}/g,z).replace(/\\{row\\}/g,Math.floor(y)).replace(/\\{col\\}/g,Math.floor(x));
@@ -112,6 +123,13 @@ async function detectCanvas(src,lat,lng){
     return out;
   }catch(e){return[]}
 }
+async function rowNAIP(p,m,hits,obj){
+  try{
+    const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng);
+    const key=p.lat.toFixed(5)+','+p.lng.toFixed(5),r=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
+    r.naipHits.push(...nh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
+  }catch(e){/* NAIP Plus is supplemental; never block the historical scan */}
+}
 function candidatePoints(){
   const out=[];
   if(window.__aquaPinTest)out.push(point(window.__aquaPinTest.lat,window.__aquaPinTest.lng));
@@ -139,8 +157,9 @@ async function run(manual){
         if($('scan'))$('scan').textContent='Phase 3 target search: '+rel.date+' · point '+(pi+1)+'/'+pts.length;
         try{
           const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),obj=localObjectness(m);
+          rowNAIP(p,m,hits,obj);
           const key=p.lat.toFixed(5)+','+p.lng.toFixed(5);
-          const row=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[]};
+          const row=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
           row.years.push(rel.date);row.hits.push(...hits);row.objectness.push(obj);
           records.set(key,row);
         }catch(e){}
@@ -160,13 +179,13 @@ async function run(manual){
       }
     }
     const hits=[...records.values()].map(r=>{
-      const strong=r.hits.filter(h=>h.confidence>=.25&&h.sizeQualified);
+      const strong=[...r.hits,...r.naipHits].filter(h=>h.confidence>=.25&&h.sizeQualified);
       const best=strong.sort((a,b)=>b.confidence-a.confidence)[0]||null;
       const years=new Set(strong.map(h=>h.year)).size;
       const change=Math.max(0,...r.changes.map(x=>x.score));
-      const obj=Math.max(0,...r.objectness);
+      const obj=Math.max(0,...r.objectness,...r.naipObjectness);
       const score=Math.min(100,Math.round(Math.min(1,years/3)*42+(best?Math.min(1,best.confidence/.7)*30:0)+change*.20+obj*.08));
-      return {...r,best,years,change,obj,score};
+      return {...r,best,years,change,obj,score,naipPlusHits:r.naipHits.length};
     }).filter(r=>r.score>=18).sort((a,b)=>b.score-a.score);
     window.__aquaPhase3Targets=hits;
     const pin=window.pin?.getLatLng?.();
@@ -190,8 +209,8 @@ function render(hits){
   host.appendChild(p);
   const list=$('phase3list');
   list.innerHTML=hits.slice(0,10).map((h,i)=>{
-    const d=h.best?(' · '+h.best.label+' '+Math.round(h.best.confidence*100)+'% · '+h.best.estimatedSizeFt+' ft'):'';
-    return '<div style="padding:5px 0;border-top:1px solid #eadfc8"><b>#'+(i+1)+' '+h.score+'/100</b>'+d+' · '+h.years+' release(s) · change '+h.change+'/100</div>';
+    const d=h.best?(' · '+h.best.label+' '+Math.round(h.best.confidence*100)+'% · '+h.best.estimatedSizeFt+' ft'+(h.best.source?' · '+h.best.source:'')):'';
+    return '<div style="padding:5px 0;border-top:1px solid #eadfc8"><b>#'+(i+1)+' '+h.score+'/100</b>'+d+' · '+h.years+' release(s) · NAIP+ '+h.naipPlusHits+' detection(s) · change '+h.change+'/100</div>';
   }).join('')||'<div class="small">No target-like zone cleared the conservative threshold.</div>';
   $('p3run').onclick=()=>run(true);
 }
