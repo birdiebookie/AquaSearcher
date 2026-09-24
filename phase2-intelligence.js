@@ -296,7 +296,7 @@ function renderPhase2Evidence(){
 async function runPhase2(manual){
   if(P2.running)return;
   const arr=window.__aquaFindings;
-  const p=(typeof pin!=='undefined'&&pin?.getLatLng)?pin.getLatLng():null,r=+$('radius')?.value||1;
+  const p=window.__aquaPinTest?{lat:+window.__aquaPinTest.lat,lng:+window.__aquaPinTest.lng}:null,r=+$('radius')?.value||1;
   if(!Array.isArray(arr)||!arr.length||!p){
     if(manual)toast('Run the Phase 1 search first.');
     return;
