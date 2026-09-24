@@ -112,20 +112,6 @@ function renderPhase3Evidence(){
   });
 }
 
-function drawPhase3Markers(){
-  if(typeof L==='undefined'||!resultLayer)return;
-  const arr=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&f.phase3);
-  arr.sort((a,b)=>(b.phase3Priority||0)-(a.phase3Priority||0));
-  arr.slice(0,60).forEach((f,i)=>{
-    const s=f.phase3Priority||0;
-    const color=s>=75?'#dc2626':s>=55?'#f59e0b':'#eab308';
-    const m=L.circleMarker([f.lat,f.lng],{radius:s>=75?10:8,color:'#fff',weight:2,fillColor:color,fillOpacity:.9});
-    m.bindTooltip('#'+(i+1)+' · Phase 3 '+s+'/100 · '+(f.name||'candidate'));
-    m.on('click',()=>{if(typeof selectF==='function')selectF(f.id)});
-    m.addTo(resultLayer);
-  });
-}
-
 function exportRows(){
   return (window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint).map((f,i)=>({
     rank:i+1,name:f.name,lat:f.lat,lng:f.lng,
@@ -166,7 +152,6 @@ async function runPhase3(manual){
   top.sort((a,b)=>(b.phase3Priority||0)-(a.phase3Priority||0));
   window.__aquaPhase3Findings=top;
   renderPhase3Evidence();
-  drawPhase3Markers();
   if($('phase3status'))$('phase3status').textContent='Complete — '+top.length+' candidates precision-checked. No Phase 1/2 findings were removed.';
   if(manual)toast('Phase 3 precision verification complete.');
 }
