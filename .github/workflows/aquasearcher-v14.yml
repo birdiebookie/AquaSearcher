@@ -8,7 +8,6 @@ on:
       - 'v15-historical-access.js'
       - 'historical-evidence.js'
       - 'v16-access-crawler.js'
-      - 'v16-bootstrap.js'
       - 'v16-map-hook.js'
       - 'v16-investigator-links.js'
       - 'v16-login.js'
@@ -46,7 +45,6 @@ jobs:
               '<script src="historical-evidence.js"></script>',
               '<script src="v15-historical-access.js"></script>',
               '<script src="v16-access-crawler.js"></script>',
-              '<script src="v16-bootstrap.js"></script>',
               '<script src="v16-investigator-links.js"></script>',
               '<script src="v16-login.js"></script>'
           ]:
@@ -77,7 +75,6 @@ jobs:
           node --check v15-historical-access.js
           node --check historical-evidence.js
           node --check v16-access-crawler.js
-          node --check v16-bootstrap.js
           node --check v16-map-hook.js
           node --check v16-investigator-links.js
           node --check v16-login.js
