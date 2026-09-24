@@ -51,7 +51,7 @@ async function odnrLayer(url,p,r){
   }catch(e){console.warn('ODNR access layer',e);return[]}
 }
 
-async function overpassAccess(p,r){
+async function overpassAccess(p,r,water=[]){
   const [s,w,n,e]=radiusBBox(p,r*MILE);
   const q=`[out:json][timeout:50];(
     node(around:${Math.round(r*MILE)},${p.lat},${p.lng})[amenity=boat_ramp];
@@ -70,8 +70,9 @@ async function overpassAccess(p,r){
     return (j.elements||[]).map(e=>{
       const pt=pointFromNode(e);if(!pt)return null;
       const t=e.tags||{};
-      return {lat:pt.lat,lng:pt.lng,name:t.name||'',type:'mapped',source:'OpenStreetMap',sourceId:e.id,kind:'access',osmTags:t};
-    }).filter(Boolean);
+      const waterDistance=water.length?Math.min(...water.map(w=>minToGeom(pt,w.geometry||[]))):Infinity;
+      return {lat:pt.lat,lng:pt.lng,name:t.name||'',type:'mapped',source:'OpenStreetMap',sourceId:e.id,kind:'access',osmTags:t,waterDistance:Math.round(waterDistance)};
+    }).filter(a=>a&&Number.isFinite(a.waterDistance)&&a.waterDistance<=75);
   }catch(e){console.warn('Overpass access',e);return[]}
 }
 
@@ -163,9 +164,9 @@ async function discoverAccess(p,r){
     out.push(...await odnrLayer('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/Ohio_POI/MapServer/0',p,r));
     out.push(...await odnrLayer('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/ODNR_HR_JobInterest/MapServer/4',p,r));
   }
-  out.push(...await overpassAccess(p,r));
-  const roads=await overpassRoads(p,r);
   const water=await nearbyWater(p,Math.min(r,5));
+  out.push(...await overpassAccess(p,r,water));
+  const roads=await overpassRoads(p,r);
   out.push(...roadEndCandidates(roads,water,p,r));
   out.push(...roadApproachCandidates(roads,water,p,r));
   return uniqueAccess(out);
