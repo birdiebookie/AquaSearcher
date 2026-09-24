@@ -8,6 +8,7 @@
 const P2={
   hydroBase:'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer',
   bathyBase:'https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/USGS_Inland_Bathymetry_Survey_Invent_v3Update/FeatureServer/0',
+  elevBase:'https://epqs.nationalmap.gov/v1/json',
   cache:new Map(),
   running:false
 };
@@ -53,6 +54,41 @@ async function query3DHP(p,r){
   }
   P2.cache.set(key,out);
   return out;
+}
+async function elevationAt(p){
+  const key=cacheKey('elev',p,0);
+  if(P2.cache.has(key))return P2.cache.get(key);
+  try{
+    const u=P2.elevBase+'?x='+encodeURIComponent(p.lng)+'&y='+encodeURIComponent(p.lat)+'&units=Feet&output=json';
+    const res=await fetch(u,{signal:AbortSignal.timeout(10000),cache:'no-store'});
+    const j=await res.json();
+    const v=num(j?.value);
+    P2.cache.set(key,v); return v;
+  }catch(e){P2.cache.set(key,null);return null}
+}
+async function queryTopography(p){
+  const key=cacheKey('topo',p,0),cached=P2.cache.get(key);if(cached)return cached;
+  const m=18,a=m/111320,z=m/(111320*Math.max(.2,Math.cos(p.lat*Math.PI/180)));
+  const pts=[p,{lat:p.lat+a,lng:p.lng},{lat:p.lat-a,lng:p.lng},{lat:p.lat,lng:p.lng+z},{lat:p.lat,lng:p.lng-z}];
+  const vals=[]; for(const q of pts){const v=await elevationAt(q);if(v!=null)vals.push(v)}
+  const out={sampleCount:vals.length,min:vals.length?Math.min(...vals):null,max:vals.length?Math.max(...vals):null,reliefFt:vals.length?Math.max(...vals)-Math.min(...vals):null};
+  P2.cache.set(key,out);return out;
+}
+function vehicleHidingSuitability(f,topo){
+  const p=f.phase2||{}, cls=p.waterClass, area=p.waterAreaSqKm, width=num(f.waterWidthFt);
+  let score=100, reasons=[];
+  if(['STREAM','CANAL'].includes(cls)){
+    if(width!=null&&width<60){score-=70;reasons.push('narrow flowline')}
+    else score-=35;
+  }
+  if(area!=null){
+    if(area<0.002){score-=55;reasons.push('very small water area')}
+    else if(area<0.01){score-=35;reasons.push('small water area')}
+    else if(area<0.05){score-=15;reasons.push('small basin')}
+  }
+  if(['POND','WATERBODY'].includes(cls)&&area!=null&&area<0.01&&!p.bathymetryAvailable){score-=20;reasons.push('small basin with no bathymetry')}
+  if(topo?.reliefFt!=null&&topo.reliefFt<2&&area!=null&&area<0.01){score-=10;reasons.push('very low local relief')}
+  return{score:clamp(score),reasons};
 }
 async function queryBathymetry(p,r){
   const key=cacheKey('bathy',p,r),cached=P2.cache.get(key);
@@ -194,7 +230,7 @@ function objectQuality(f){
   if(best.confidence>=.5)s+=8;
   return clamp(s);
 }
-function enrichFinding(f,hydro,bathy,access){
+async function enrichFinding(f,hydro,bathy,access){
   const hm=nearestHydro(f,hydro),h=hm.best,aq=accessQuality(f,access);
   const area=h?hydroArea(h):num(f.waterAreaSqKm);
   const cls=waterClass(f,h);
@@ -209,8 +245,8 @@ function enrichFinding(f,hydro,bathy,access){
     const p=featurePoint(b);return p?miles(f.lat,f.lng,p.lat,p.lng)<=Math.max(.08,(aq.distance||0)+.15):false;
   });
   const bathy=bathyEvidence(bathyMatches);
-  const hist=historicalQuality(f),obj=objectQuality(f);
-  const phase2Score=clamp(aq.score*.35+hist*.25+obj*.25+suitability*.10+(f.nearPin?5:0));
+  const hist=historicalQuality(f),obj=objectQuality(f);\n  const topo=await queryTopography(f);
+  const hiding=vehicleHidingSuitability(f,{waterClass:cls,waterAreaSqKm:area,bathymetryAvailable:bathy.available},topo);\n  const phase2Score=clamp(aq.score*.30+hist*.22+obj*.23+suitability*.10+hiding.score*.15+(f.nearPin?5:0));
   f.phase2={
     waterClass:cls,
     waterAreaSqKm:area,
@@ -229,8 +265,7 @@ function enrichFinding(f,hydro,bathy,access){
     depthValues:bathy.values,
     depthMin:bathy.min,
     depthMax:bathy.max,
-    depthEvidence:bathy.summary,
-    phase2Score,
+    depthEvidence:bathy.summary,\n    topographySampleCount:topo.sampleCount,\n    topographyReliefFt:topo.reliefFt,\n    vehicleHidingScore:hiding.score,\n    vehicleHidingReasons:hiding.reasons,\n    phase2Score,
     status:'Phase 2 enrichment complete'
   };
   f.waterAreaSqKm=area;
@@ -239,7 +274,7 @@ function enrichFinding(f,hydro,bathy,access){
     'Water: '+cls+(area!=null?' · '+area.toFixed(3)+' km²':''),
     'Access: '+aq.score+'/100'+(aq.distance!=null?' · '+aq.distance.toFixed(2)+' mi':''),
     'Historical: '+hist+'/100',
-    'Object: '+obj+'/100'
+    'Object: '+obj+'/100',\n    'Vehicle hiding: '+hiding.score+'/100'+(hiding.reasons.length?' · '+hiding.reasons.join(', '):'')
   ];
   return f;
 }
@@ -264,7 +299,7 @@ function exportRows(){
     accessDistanceMi:f.phase2?.accessDistanceMi??f.accessDistance??'',historicalScore:f.phase2?.historicalScore??f.hist?.best??0,
     persistence:f.phase2?.historicalPersistence??f.hist?.persistenceCount??0,objectScore:f.phase2?.objectScore??f.objectScore??0,
     bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO',bathymetryRecords:f.phase2?.bathymetryRecords??0,
-    depthMin:f.phase2?.depthMin??'',depthMax:f.phase2?.depthMax??'',depthEvidence:f.phase2?.depthEvidence||''
+    depthMin:f.phase2?.depthMin??'',depthMax:f.phase2?.depthMax??'',depthEvidence:f.phase2?.depthEvidence||'',vehicleHidingScore:f.phase2?.vehicleHidingScore??'',vehicleHidingReasons:(f.phase2?.vehicleHidingReasons||[]).join('; '),topographyReliefFt:f.phase2?.topographyReliefFt??''
   }));
 }
 function download(name,type,data){
@@ -307,7 +342,7 @@ async function runPhase2(manual){
     const [hydro,bathy]=await Promise.all([query3DHP(p,r),queryBathymetry(p,r)]);
     const access=window.aquaV16Access||[];
     const candidates=arr.filter(f=>!f.isPinTest&&!f.accessPoint);
-    for(const f of candidates)enrichFinding(f,hydro,bathy,access);
+    for(const f of candidates)await enrichFinding(f,hydro,bathy,access);
     candidates.sort((a,b)=>(b.phase2Priority||0)-(a.phase2Priority||0));
     window.__aquaPhase2Findings=candidates;
     window.__aquaPhase2HydroCount=hydro.length;
