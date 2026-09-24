@@ -101,8 +101,23 @@ function hydroName(f){
 }
 function hydroArea(f){
   const a=attrs(f);
-  for(const k of ['AREASQKM','AREA_SQKM','AreaSqKm','AREA_KM2']){const n=num(a[k]);if(n!=null)return n}
+  for(const k of ['AREASQKM','AREA_SQKM','AreaSqKm','AREA_KM2','AREA']){const n=num(a[k]);if(n!=null)return n}
   return null;
+}
+function depthValues(f){
+  const a=attrs(f),out=[];
+  for(const [k,v] of Object.entries(a)){
+    if(!/depth|depth_ft|depth_m|bathym/i.test(k))continue;
+    const n=num(v);if(n!=null&&Math.abs(n)<100000)out.push({field:k,value:n});
+  }
+  return out;
+}
+function bathyEvidence(records){
+  const values=[];
+  for(const f of records||[])values.push(...depthValues(f));
+  if(!values.length)return{available:(records||[]).length>0,values:[],min:null,max:null,summary:(records||[]).length?'Survey inventory coverage found; no numeric depth field was exposed by the returned records.':'No bathymetry-inventory coverage found at this screening radius.'};
+  const nums=values.map(x=>x.value);
+  return{available:true,values,min:Math.min(...nums),max:Math.max(...nums),summary:'Numeric bathymetry depth field(s) were returned by the survey inventory.'};
 }
 function hydroType(f){
   const a=attrs(f);
@@ -193,6 +208,7 @@ function enrichFinding(f,hydro,bathy,access){
   const bathyMatches=(bathy||[]).filter(b=>{
     const p=featurePoint(b);return p?miles(f.lat,f.lng,p.lat,p.lng)<=Math.max(.08,(aq.distance||0)+.15):false;
   });
+  const bathy=bathyEvidence(bathyMatches);
   const hist=historicalQuality(f),obj=objectQuality(f);
   const phase2Score=clamp(aq.score*.35+hist*.25+obj*.25+suitability*.10+(f.nearPin?5:0));
   f.phase2={
@@ -208,9 +224,12 @@ function enrichFinding(f,hydro,bathy,access){
     historicalScore:hist,
     historicalPersistence:Number(f.hist?.persistenceCount??f.hist?.persistence??0)||0,
     objectScore:obj,
-    bathymetryAvailable:bathyMatches.length>0,
+    bathymetryAvailable:bathy.available,
     bathymetryRecords:bathyMatches.length,
-    depthEvidence:bathyMatches.length?'Bathymetry coverage available; exact depth requires the underlying survey/elevation product.':'No USGS bathymetry-inventory coverage found at this screening radius.',
+    depthValues:bathy.values,
+    depthMin:bathy.min,
+    depthMax:bathy.max,
+    depthEvidence:bathy.summary,
     phase2Score,
     status:'Phase 2 enrichment complete'
   };
@@ -244,7 +263,8 @@ function exportRows(){
     accessScore:f.phase2?.accessScore??f.access??0,accessType:f.phase2?.accessType||f.accessType||'',
     accessDistanceMi:f.phase2?.accessDistanceMi??f.accessDistance??'',historicalScore:f.phase2?.historicalScore??f.hist?.best??0,
     persistence:f.phase2?.historicalPersistence??f.hist?.persistenceCount??0,objectScore:f.phase2?.objectScore??f.objectScore??0,
-    bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO',depthEvidence:f.phase2?.depthEvidence||''
+    bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO',bathymetryRecords:f.phase2?.bathymetryRecords??0,
+    depthMin:f.phase2?.depthMin??'',depthMax:f.phase2?.depthMax??'',depthEvidence:f.phase2?.depthEvidence||''
   }));
 }
 function download(name,type,data){
