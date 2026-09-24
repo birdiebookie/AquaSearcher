@@ -246,7 +246,7 @@ async function enrichFinding(f,hydro,bathy,access){
   });
   const bathy=bathyEvidence(bathyMatches);
   const hist=historicalQuality(f),obj=objectQuality(f);\n  const topo=await queryTopography(f);
-  const hiding=vehicleHidingSuitability(f,{waterClass:cls,waterAreaSqKm:area,bathymetryAvailable:bathy.available},topo);\n  const phase2Score=clamp(aq.score*.30+hist*.22+obj*.23+suitability*.10+hiding.score*.15+(f.nearPin?5:0));
+  const hiding=vehicleHidingSuitability(f,topo);\n  const phase2Score=clamp(aq.score*.30+hist*.22+obj*.23+suitability*.10+hiding.score*.15+(f.nearPin?5:0));
   f.phase2={
     waterClass:cls,
     waterAreaSqKm:area,
