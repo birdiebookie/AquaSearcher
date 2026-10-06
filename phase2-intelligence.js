@@ -8,6 +8,7 @@
 const P2={
   hydroBase:'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer',
   bathyBase:'https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/USGS_Inland_Bathymetry_Survey_Invent_v3Update/FeatureServer/0',
+  ohioBathyBase:'https://gis2.ohiodnr.gov/ArcGIS/rest/services/DOW_Services/DOW_Lakes_Bathymetry/MapServer/0',
   elevBase:'https://epqs.nationalmap.gov/v1/json',
   cache:new Map(),
   running:false
@@ -89,6 +90,34 @@ function vehicleHidingSuitability(f,topo){
   if(['POND','WATERBODY'].includes(cls)&&area!=null&&area<0.01&&!p.bathymetryAvailable){score-=20;reasons.push('small basin with no bathymetry')}
   if(topo?.reliefFt!=null&&topo.reliefFt<2&&area!=null&&area<0.01){score-=10;reasons.push('very low local relief')}
   return{score:clamp(score),reasons};
+}
+async function queryOhioBathymetry(p,r){
+  // Ohio DNR provides actual lake/reservoir depth contours and depth attributes.
+  // Use it as a live supplemental source when the search point is in Ohio.
+  if(p.lng>-80.45||p.lng<-84.95||p.lat<38.35||p.lat>42.05)return[];
+  const key=cacheKey('ohio-bathy',p,r),cached=P2.cache.get(key);
+  if(cached)return cached;
+  try{
+    const meters=Math.round(Math.min(r,5)*1609.344);
+    const j=await arcQuery(P2.ohioBathyBase,{
+      where:'1=1',
+      geometry:p.lng+','+p.lat,
+      geometryType:'esriGeometryPoint',
+      inSR:'4326',
+      spatialRel:'esriSpatialRelIntersects',
+      distance:meters,
+      units:'esriSRUnit_Meter',
+      outFields:'LAKE_NAME,DEPTH,RES,DT_ADDED',
+      returnGeometry:'true',
+      outSR:'4326',
+      f:'json'
+    });
+    const out=(j.features||[]).map(f=>({...f,_bathySource:'Ohio DNR'}));
+    P2.cache.set(key,out); return out;
+  }catch(e){
+    console.warn('Ohio DNR bathymetry query failed',e);
+    P2.cache.set(key,[]); return[];
+  }
 }
 async function queryBathymetry(p,r){
   const key=cacheKey('bathy',p,r),cached=P2.cache.get(key);
@@ -339,7 +368,8 @@ async function runPhase2(manual){
   P2.running=true;ensureBar();
   if($('phase2status'))$('phase2status').textContent='Loading current USGS 3DHP hydrography and bathymetry inventory…';
   try{
-    const [hydro,bathy]=await Promise.all([query3DHP(p,r),queryBathymetry(p,r)]);
+    const [hydro,usgsBathy,ohioBathy]=await Promise.all([query3DHP(p,r),queryBathymetry(p,r),queryOhioBathymetry(p,r)]);
+    const bathy=[...usgsBathy,...ohioBathy];
     const access=window.aquaV16Access||[];
     const candidates=arr.filter(f=>!f.isPinTest&&!f.accessPoint);
     for(const f of candidates)await enrichFinding(f,hydro,bathy,access);
@@ -347,8 +377,9 @@ async function runPhase2(manual){
     window.__aquaPhase2Findings=candidates;
     window.__aquaPhase2HydroCount=hydro.length;
     window.__aquaPhase2BathyCount=bathy.length;
+    window.__aquaPhase2BathySources={usgs:usgsBathy.length,ohioDNR:ohioBathy.length};
     renderPhase2Evidence();
-    if($('phase2status'))$('phase2status').textContent='Complete — '+candidates.length+' water candidates enriched · '+hydro.length+' 3DHP features · '+bathy.length+' bathymetry-inventory records. Phase 1 markers and filtering were preserved.';
+    if($('phase2status'))$('phase2status').textContent='Complete — '+candidates.length+' water candidates enriched · '+hydro.length+' 3DHP features · '+bathy.length+' bathymetry records (USGS '+usgsBathy.length+' · Ohio DNR '+ohioBathy.length+'). Phase 1 markers and filtering were preserved.';
     if($('status'))$('status').textContent+=' Phase 2 intelligence added.';
     toast('Phase 2 intelligence complete. Phase 1 results were preserved.');
   }catch(e){
