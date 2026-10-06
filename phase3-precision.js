@@ -71,7 +71,15 @@ function scoreTarget(f){
   const access=clamp(p2.accessScore??f.access??0);
   const history=clamp(p2.historicalScore??f.hist?.best??f.historicalChange??0);
   const suitability=clamp(p2.suitability??f.waterSuitability??0);
-  const raw=vehicle*.30+obj.score*.20+access*.18+history*.12+suitability*.10+temp.score*.10-ground.risk*.20;
+  const width=Number(f.waterWidthFt);
+  const area=Number(p2.waterAreaSqKm??f.waterAreaSqKm??f.areaSqKm??0);
+  // Vehicle-fit penalty: small water stays low unless there is strong anomaly evidence.
+  let fitPenalty=0;
+  if(Number.isFinite(width)){if(width<30)fitPenalty=35;else if(width<40)fitPenalty=22;else if(width<50)fitPenalty=10;}
+  if(area>0&&area<.01)fitPenalty+=12;
+  const anomalyOverride=history>=70&&access>=45;
+  if(anomalyOverride)fitPenalty=Math.round(fitPenalty*.35);
+  const raw=vehicle*.22+obj.score*.18+access*.18+history*.24+suitability*.10+temp.score*.08-ground.risk*.18-fitPenalty;
   const precision=clamp(raw);
   let status='SCREENING ONLY';
   if(vehicle>=60&&obj.score>=55&&access>=55&&ground.risk<35)status='TARGET CANDIDATE';
@@ -86,6 +94,8 @@ function scoreTarget(f){
     temporalScore:temp.score,
     groundRisk:ground.risk,
     groundRiskReasons:ground.reasons,
+    waterFitPenalty:fitPenalty,
+    anomalyOverride,
     accessDistanceMi:Number.isFinite(p2.accessDistanceMi)?p2.accessDistanceMi:(Number.isFinite(f.accessDistance)?f.accessDistance:null),
     method:'Phase 3 multi-factor precision verification',
     note:'Automated screening; imagery and target identity still require human verification.'
