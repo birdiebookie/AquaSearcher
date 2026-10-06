@@ -34,25 +34,27 @@ function waterSuitability(f){
  let s=65;
  if(/stream|river|canal|ditch|drain|waterway/.test(type))s-=22;
  if(/canal|ditch|drain|fountain|pool|swimming|ornamental|decorative/.test(name+' '+type))s-=35;
- if(Number.isFinite(f.waterWidthFt)){if(f.waterWidthFt<25)s-=55;else if(f.waterWidthFt<40)s-=25;else if(f.waterWidthFt>=100)s+=15;else if(f.waterWidthFt>=60)s+=8}
- if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=1)s+=12;else if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=.05)s+=6;
- if(/lake|reservoir|pond|harsha/.test(name))s+=12;
- if(/river/.test(name)&&!(/stream/.test(name)))s+=6;
- if((f.access||0)>75)s+=10;
+ if(Number.isFinite(f.waterWidthFt)){if(f.waterWidthFt<30)s-=55;else if(f.waterWidthFt<40)s-=38;else if(f.waterWidthFt<50)s-=22;else if(f.waterWidthFt>=100)s+=18;else if(f.waterWidthFt>=60)s+=10;else if(f.waterWidthFt>=50)s+=4}
+ if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=1)s+=15;else if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=.10)s+=9;else if(Number(f.waterAreaSqKm||f.areaSqKm||0)>=.05)s+=5;else if(Number(f.waterAreaSqKm||f.areaSqKm||0)>0&&Number(f.waterAreaSqKm||f.areaSqKm||0)<.01)s-=28;
+ if(/lake|reservoir|harsha/.test(name))s+=15;
+ if(/river/.test(name)&&!(/stream/.test(name)))s+=8;
+ if((f.access||0)>=85)s+=12;else if((f.access||0)>=70)s+=6;
  return Math.max(0,Math.min(100,Math.round(s)));
 }
 function usableWater(f){
  if(!f||f.isPinTest)return false;
  const type=String(f.ftype||'').toLowerCase(),name=String(f.name||'').toLowerCase();
  if(/fountain|swimming pool|ornamental pond|decorative pond|splash pad|drinking water|water point|watering place/.test(name))return false;
- if(/canal|ditch|drainageway/.test(name+' '+type)&&(f.access||0)<75)return false;
- if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<25)return false;
+ if(/drainageway|ditch|drain/.test(name+' '+type)&&(f.access||0)<85)return false;
+ if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<30)return false;
  const rawName=String(f._osmTags?.name||f.name||'').trim();
  const realName=!!rawName&&!/^(unnamed|unknown|river)$/i.test(rawName);
  const minor=/^stream$|^canal$|^ditch$|^drain$/.test(type)||f._flowline||/^river$/.test(String(f._osmTags?.waterway||'').toLowerCase());
- const namedMajor=/lake|reservoir|pond|harsha/.test(name)||(/^river$/.test(type)&&realName)||(/river/.test(String(f._osmTags?.waterway||'').toLowerCase())&&realName);
+ const namedMajor=/lake|reservoir|harsha/.test(name)||(/^river$/.test(type)&&realName)||(/river/.test(String(f._osmTags?.waterway||'').toLowerCase())&&realName);
  const area=Number(f.waterAreaSqKm||f.areaSqKm||0);
- if(minor && !namedMajor && area<.02 && (f.access||0)<80)return false;
+ if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<50&&!namedMajor&&(f.access||0)<80)return false;
+ if(minor && !namedMajor && area<.03 && (f.access||0)<80)return false;
+ if(area>0&&area<.005&&(f.access||0)<85)return false;
  return true;
 }
 function dedupeWater(arr){
@@ -86,10 +88,10 @@ function dedupeAccess(arr){
 function recalc(f){
  f.waterSuitability=waterSuitability(f);
  const access=Number(f.access)||0,hist=Number(f.hist?.best)||0,vehicle=f.veh?.best?Math.round((Number(f.veh.best.confidence)||0)*100):0;
- const pin=f.isPinTest?0:(f.nearPin?70:0);
- f.priority=f.isPinTest?20:Math.max(0,Math.min(100,Math.round(access*.40+hist*.30+vehicle*.15+f.waterSuitability*.10+pin*.05)));
+ const pin=f.isPinTest?0:(f.nearPin?55:0);
+ f.priority=f.isPinTest?20:Math.max(0,Math.min(100,Math.round(access*.38+hist*.38+vehicle*.14+f.waterSuitability*.10+pin*.05)));
  f.label=f.isPinTest?'TEST':f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
- f.scoring={access:40,historical:30,object:15,waterSuitability:10,location:5,note:'Phase 1 screening score; access and historical evidence lead.'};
+ f.scoring={access:38,historical:38,object:14,waterSuitability:10,location:5,note:'Fine-tuned vehicle-fit/anomaly screening score.'};
  f.scoreReasons=scoreReason(f);
  return f;
 }
