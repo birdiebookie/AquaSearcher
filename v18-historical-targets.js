@@ -37,43 +37,64 @@ function expand(p){
   }
   return o;
 }
-function patchVehiclePoints(f){
-  const original=window.v17Pts;
-  if(typeof original!=='function'||original.__v18)return;
-  const wrapped=function(ff){
-    const base=original(ff)||[],hist=historicalTargetPoints(ff),all=[];
-    for(const p of hist)all.push(...expand(p));
-    for(const p of base)all.push(p);
-    const unique=[];
-    for(const p of all){
-      if(!Number.isFinite(+p.lat)||!Number.isFinite(+p.lng))continue;
-      if(!unique.some(q=>Math.abs(q.lat-p.lat)<.00001&&Math.abs(q.lng-p.lng)<.00001)){
-        unique.push({lat:+p.lat,lng:+p.lng,why:p.why||'search point',score:p.score||0});
-      }
-      if(unique.length>=96)break;
-    }
-    return unique;
-  };
-  wrapped.__v18=true;
-  window.v17Pts=wrapped;
-}
+function patchVehiclePoints(){ /* v18 targets are applied by the vehicle wrapper below. */ }
 function wrapVehicle(){
   const old=window.vehicleScan;
   if(typeof old!=='function'||old.__v18)return;
   const wrapped=async function(f,rs,silent){
-    const hist=historicalTargetPoints(f);
-    const strongHist=hist.filter(p=>p.score>=60);
-    if(strongHist.length){
-      f.v18HistoricalTargets=strongHist.slice(0,8).map(p=>({lat:p.lat,lng:p.lng,score:p.score,why:p.why}));
+    const targets=historicalTargetPoints(f);
+    const strong=targets.filter(p=>p.score>=60).slice(0,8);
+    const originals={lat:f.lat,lng:f.lng};
+    const merged=[];
+    const seen=new Set();
+    // First run the normal candidate search.
+    try{
+      await old.apply(this,arguments);
+      if(Array.isArray(f?.veh?.hits))for(const h of f.veh.hits){const k=[h.year,h.lat,h.lng,h.label,h.estimatedSizeFt].join('|');if(!seen.has(k)){seen.add(k);merged.push(h)}}
+    }catch(e){console.warn('V18 base vehicle scan',e)}
+    // Then explicitly run the detector at the exact historical transition points.
+    // This is the key fix for cases where the water feature centroid is hundreds
+    // of feet from the actual object visible in historical imagery.
+    for(const t of strong){
+      try{
+        const probe=Object.assign({},f,{lat:t.lat,lng:t.lng,isPinTest:false});
+        await old.call(this,probe,rs,true);
+        if(Array.isArray(probe?.veh?.hits))for(const h of probe.veh.hits){
+          h.historicalTarget=true;h.historicalTargetScore=t.score;h.historicalTargetReason=t.why;
+          const k=[h.year,h.lat,h.lng,h.label,h.estimatedSizeFt].join('|');
+          if(!seen.has(k)){seen.add(k);merged.push(h)}
+        }
+      }catch(e){console.warn('V18 historical target scan',e)}
     }
-    const out=await old.apply(this,arguments);
-    if(f?.veh){
-      f.veh.historicalTargetCount=hist.length;
-      f.veh.historicalTargetPoints=hist.slice(0,12);
+    if(f){
+      merged.sort((a,b)=>(b.sizeQualified-a.sizeQualified)||(b.confidence-a.confidence));
+      const threshold=15;
+      const strongHits=merged.filter(h=>h.confidence>=.25&&h.estimatedSizeFt>=threshold);
+      const years=new Set(strongHits.map(h=>h.year)).size;
+      const best=strongHits[0]||null;
+      const max=best?.confidence||0;
+      const score=Math.min(100,Math.round(Math.min(1,years/3)*55+Math.min(1,max/.7)*45));
+      f.veh=f.veh||{};
+      f.veh.hits=merged;
+      f.veh.historicalReleasesWithHits=years;
+      f.veh.best=best;
+      f.veh.sizeThresholdFt=threshold;
+      f.veh.historicalTargetCount=strong.length;
+      f.veh.historicalTargetPoints=strong;
       f.veh.model=(f.veh.model||'')+' + exact historical-change targeting';
+      f.objectScore=score;
+      f.vehicleEvidence=f.vehicleEvidence||{};
+      f.vehicleEvidence.score=score;
+      f.vehicleEvidence.sizeThresholdFt=threshold;
+      f.vehicleEvidence.temporalConsensus=years;
+      f.vehicleEvidence.historicalTargetCount=strong.length;
+      f.vehicleEvidence.status=best?
+        ('15+ ft vehicle-class detections found; exact historical-change coordinates were also scanned. Strongest '+best.label+' confidence '+Math.round(max*100)+'%, estimated '+best.estimatedSizeFt+' ft.')
+        :'No 15+ ft vehicle-class detection returned, including the exact historical-change coordinates.';
+      if(typeof window.aquaScoreFinding==='function')window.aquaScoreFinding(f);
     }
-    if(typeof window.aquaScoreFinding==='function')window.aquaScoreFinding(f);
-    return out;
+    f.lat=originals.lat;f.lng=originals.lng;
+    return f?.veh?.best||null;
   };
   wrapped.__v18=true;
   window.vehicleScan=wrapped;
