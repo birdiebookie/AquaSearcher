@@ -291,6 +291,25 @@ $('start').onclick=run;$('closeModal').onclick=closeModal;$('newBtn').onclick=()
 <script>
 (function(){function addKnown(){if(document.getElementById('knownCarBtn'))return;const host=document.querySelector('.detail > div:nth-child(2) > div:last-child');if(!host)return;const b=document.createElement('button');b.id='knownCarBtn';b.className='report';b.textContent='🧪 TEST KNOWN CAR';host.appendChild(b);b.onclick=async()=>{const p=pin?.getLatLng?.();if(!p){toast('Put the pin on a known car location first.');return}const rs=releases(waybackCatalog||[]);if(!rs.length){toast('Run a search first so historical releases are loaded.');return}const f={id:'known-car-test',name:'KNOWN CAR TEST',ftype:'known submerged vehicle',lat:p.lat,lng:p.lng,priority:100,access:100,anomaly:0,isPinTest:true,samples:microSamples(p),label:'TEST'};try{const best=await vehicleScan(f,rs,true),v=f.vehicleEvidence||{};toast(`Known-car test: ${v.score}/100 · ${best?best.label+' detected':'no vehicle-class hit'} · ${v.temporalConsensus||0} historical releases with hits`);showCandidate(f)}catch(e){toast('Known-car test failed: '+e.message)}}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addKnown);else setTimeout(addKnown,100)})();
 </script>
+<script>
+/* Emergency runtime guard: the app must never appear as a blank page after a script error. */
+window.addEventListener('error',function(e){
+  try{
+    const s=document.getElementById('status');
+    if(s) s.textContent='AquaSearcher startup error: '+(e.message||'A script failed to load.');
+    const p=document.getElementById('pct');
+    if(p) p.textContent='ERROR';
+    const t=document.getElementById('toast');
+    if(t){t.textContent='AquaSearcher hit a startup error. Refreshing is safe.';t.style.display='block';}
+  }catch(_){}
+});
+window.addEventListener('unhandledrejection',function(e){
+  try{
+    const s=document.getElementById('status');
+    if(s) s.textContent='AquaSearcher startup error: '+(e.reason?.message||'An initialization request failed.');
+  }catch(_){}
+});
+</script>
 <script src="v14-improvements.js"></script>
 <script src="historical-evidence.js"></script>
 <script src="v15-historical-access.js"></script>
@@ -298,10 +317,12 @@ $('start').onclick=run;$('closeModal').onclick=closeModal;$('newBtn').onclick=()
 <script src="v16-investigator-links.js"></script>
 <script src="v16-login.js"></script>
 <script src="phase1-foundation.js"></script>
-<script src="phase2-intelligence.js"></script>\n<script src="phase3-precision.js"></script>
+<script src="phase2-intelligence.js"></script>
+<script src="phase3-precision.js"></script>
 <script src="v17-priority-access.js"></script>
+<script src="v18-historical-targets.js"></script>
 <script src="v19-highres-object-scan.js"></script>
-<script src="v20-map-expand.js"></script>\n<script src="v21-fast-vehicle-scan.js"></script>
+<script src="v20-map-expand.js"></script>
+<script src="v21-fast-vehicle-scan.js"></script>
 </body>
 </html>
-<script src="v18-historical-targets.js"></script>
