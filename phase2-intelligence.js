@@ -259,7 +259,7 @@ function objectQuality(f){
   if(best.confidence>=.5)s+=8;
   return clamp(s);
 }
-async function enrichFinding(f,hydro,bathy,access){
+async function enrichFinding(f,hydro,bathyRecords,access){
   const hm=nearestHydro(f,hydro),h=hm.best,aq=accessQuality(f,access);
   const area=h?hydroArea(h):num(f.waterAreaSqKm);
   const cls=waterClass(f,h);
@@ -270,12 +270,14 @@ async function enrichFinding(f,hydro,bathy,access){
   if(['LAKE','RESERVOIR','RIVER'].includes(cls))suitability+=8;
   if(['STREAM','CANAL'].includes(cls)&&width!=null&&width<60)suitability-=12;
   suitability=clamp(suitability);
-  const bathyMatches=(bathy||[]).filter(b=>{
+  const bathyMatches=(bathyRecords||[]).filter(b=>{
     const p=featurePoint(b);return p?miles(f.lat,f.lng,p.lat,p.lng)<=Math.max(.08,(aq.distance||0)+.15):false;
   });
-  const bathy=bathyEvidence(bathyMatches);
-  const hist=historicalQuality(f),obj=objectQuality(f);\n  const topo=await queryTopography(f);
-  const hiding=vehicleHidingSuitability(f,topo);\n  const phase2Score=clamp(aq.score*.30+hist*.22+obj*.23+suitability*.10+hiding.score*.15+(f.nearPin?5:0));
+  const bathyInfo=bathyEvidence(bathyMatches);
+  const hist=historicalQuality(f),obj=objectQuality(f);
+  const topo=await queryTopography(f);
+  const hiding=vehicleHidingSuitability(f,topo);
+  const phase2Score=clamp(aq.score*.30+hist*.22+obj*.23+suitability*.10+hiding.score*.15+(f.nearPin?5:0));
   f.phase2={
     waterClass:cls,
     waterAreaSqKm:area,
@@ -289,12 +291,17 @@ async function enrichFinding(f,hydro,bathy,access){
     historicalScore:hist,
     historicalPersistence:Number(f.hist?.persistenceCount??f.hist?.persistence??0)||0,
     objectScore:obj,
-    bathymetryAvailable:bathy.available,
+    bathymetryAvailable:bathyInfo.available,
     bathymetryRecords:bathyMatches.length,
-    depthValues:bathy.values,
-    depthMin:bathy.min,
-    depthMax:bathy.max,
-    depthEvidence:bathy.summary,\n    topographySampleCount:topo.sampleCount,\n    topographyReliefFt:topo.reliefFt,\n    vehicleHidingScore:hiding.score,\n    vehicleHidingReasons:hiding.reasons,\n    phase2Score,
+    depthValues:bathyInfo.values,
+    depthMin:bathyInfo.min,
+    depthMax:bathyInfo.max,
+    depthEvidence:bathyInfo.summary,
+    topographySampleCount:topo.sampleCount,
+    topographyReliefFt:topo.reliefFt,
+    vehicleHidingScore:hiding.score,
+    vehicleHidingReasons:hiding.reasons,
+    phase2Score,
     status:'Phase 2 enrichment complete'
   };
   f.waterAreaSqKm=area;
@@ -303,7 +310,8 @@ async function enrichFinding(f,hydro,bathy,access){
     'Water: '+cls+(area!=null?' · '+area.toFixed(3)+' km²':''),
     'Access: '+aq.score+'/100'+(aq.distance!=null?' · '+aq.distance.toFixed(2)+' mi':''),
     'Historical: '+hist+'/100',
-    'Object: '+obj+'/100',\n    'Vehicle hiding: '+hiding.score+'/100'+(hiding.reasons.length?' · '+hiding.reasons.join(', '):'')
+    'Object: '+obj+'/100',
+    'Vehicle hiding: '+hiding.score+'/100'+(hiding.reasons.length?' · '+hiding.reasons.join(', '):'')
   ];
   return f;
 }
@@ -336,7 +344,8 @@ function download(name,type,data){
 }
 function downloadCSV(){
   const rows=exportRows();if(!rows.length){toast('No Phase 2 water candidates to export.');return}
-  const cols=Object.keys(rows[0]),csv=[cols.map(csvEscape).join(',')].concat(rows.map(r=>cols.map(k=>csvEscape(r[k])).join(','))).join('\n');
+  const cols=Object.keys(rows[0]),csv=[cols.map(csvEscape).join(',')].concat(rows.map(r=>cols.map(k=>csvEscape(r[k])).join(','))).join('
+');
   download('AquaSearcher-Phase2.csv','text/csv;charset=utf-8',csv);
 }
 function downloadKML(){
