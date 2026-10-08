@@ -81,6 +81,7 @@ async function run(){
     }catch(e){report(v17,null)}
   }catch(e){toast('Known-car benchmark failed: '+e.message);$('scan').textContent='KNOWN-CAR BENCHMARK ERROR: '+e.message}
 }
+window.runMoonBayBenchmark=run;
 function install(){
   if(document.getElementById('knownCarBenchmarkBtn'))return;
   const host=document.querySelector('.detail > div:nth-child(2) > div:last-child');
@@ -89,6 +90,7 @@ function install(){
   b.textContent='🚗 RUN MOON BAY BENCHMARK';
   b.onclick=run;host.appendChild(b);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,200));
-else setTimeout(install,200);
+function boot(){setTimeout(install,250);setTimeout(install,1500);setTimeout(install,3500)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
+else boot();
 })();
