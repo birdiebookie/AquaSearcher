@@ -21,24 +21,37 @@ async function frame(r,cx,cy,center){
   const d=g.getImageData(0,0,768,768).data,N=768*768,G=new Int16Array(N),W=new Uint8Array(N),wl=[];
   for(let p=0,i=0;p<N;p++,i+=4){const r0=d[i],g0=d[i+1],b0=d[i+2],l=(r0+g0+b0)/3;G[p]=l;
     if(l>8&&l<125&&g0+b0>=2*r0-10&&Math.max(r0,g0,b0)-Math.min(r0,g0,b0)<80){W[p]=1;if(p%5===0)wl.push(l)}}
+  for(let p=0;p<N-1540;p++)if(W[p]&&Math.abs(G[p]-G[p+2])+Math.abs(G[p]-G[p+1536])>14)W[p]=0;
   wl.sort((a,b)=>a-b);const med=wl.length?wl[wl.length>>1]:100;
   for(let p=0;p<N;p++)G[p]-=med;
   return{r,G,W,water:wl.length};
 }
-function blobs(A,B,m){
+function blobs(A,B,m,SW,NW){
   const N=768*768,on=new Uint8Array(N),seen=new Uint8Array(N),out=[];
-  for(let y=20;y<748;y++)for(let x=20;x<748;x++){const p=y*768+x;if((A.W[p]||B.W[p])&&Math.abs(B.G[p]-A.G[p])>30)on[p]=1}
+  for(let y=20;y<748;y++)for(let x=20;x<748;x++){const p=y*768+x;if(NW[p]&&Math.abs(B.G[p]-A.G[p])>30)on[p]=1}
   for(let s=0;s<N;s++){if(!on[s]||seen[s])continue;
     const q=[s];seen[s]=1;let n=0,x0=768,x1=0,y0=768,y1=0;
     while(q.length){const p=q.pop(),x=p%768,y=(p/768)|0;n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
       for(const o of[1,-1,768,-768]){const k=p+o;if(k>=0&&k<N&&on[k]&&!seen[k]){seen[k]=1;q.push(k)}}}
     const L=Math.max(x1-x0+1,y1-y0+1)*m*3.281,Wd=Math.min(x1-x0+1,y1-y0+1)*m*3.281,fill=n/((x1-x0+1)*(y1-y0+1));
     if(L<9||L>26||Wd<3.5||Wd>12||fill<.35)continue;
-    const cx=(x0+x1)>>1,cy=(y0+y1)>>1,ring=[[cx,y0-12],[cx,y1+12],[x0-12,cy],[x1+12,cy]].filter(([a,b])=>a>=0&&b>=0&&a<768&&b<768&&(A.W[b*768+a]||B.W[b*768+a])).length;
+    const cx=(x0+x1)>>1,cy=(y0+y1)>>1,ring=[[cx,y0-12],[cx,y1+12],[x0-12,cy],[x1+12,cy]].filter(([a,b])=>a>=0&&b>=0&&a<768&&b<768&&SW[b*768+a]).length;
     if(ring<3)continue;
     out.push({x0,x1,y0,y1,cx,cy,L,Wd});
   }
   return out;
+}
+function stableWater(frames){
+  const N=768*768,cnt=new Uint8Array(N),need=Math.max(2,Math.ceil(frames.length*.6)),S=new Uint8Array(N),SW=new Uint8Array(N),seen=new Uint8Array(N);
+  for(const F of frames)for(let p=0;p<N;p++)cnt[p]+=F.W[p];
+  for(let p=0;p<N;p++)S[p]=cnt[p]>=need?1:0;
+  for(let s=0;s<N;s++){if(!S[s]||seen[s])continue;const q=[s],comp=[];seen[s]=1;
+    while(q.length){const p=q.pop();comp.push(p);for(const o of[1,-1,768,-768]){const k=p+o;if(k>=0&&k<N&&S[k]&&!seen[k]){seen[k]=1;q.push(k)}}}
+    if(comp.length>=3000)for(const p of comp)SW[p]=1}
+  const H=new Uint8Array(N),NW=new Uint8Array(N);
+  for(let y=0;y<768;y++){let run=-99;for(let x=0;x<768;x++){if(SW[y*768+x])run=x;if(x-run<=10)H[y*768+x]=1}run=999;for(let x=767;x>=0;x--){if(SW[y*768+x])run=x;if(run-x<=10)H[y*768+x]=1}}
+  for(let x=0;x<768;x++){let run=-99;for(let y=0;y<768;y++){if(H[y*768+x])run=y;if(y-run<=10)NW[y*768+x]=1}run=999;for(let y=767;y>=0;y--){if(H[y*768+x])run=y;if(run-y<=10)NW[y*768+x]=1}}
+  return{SW,NW};
 }
 function strength(F,b,ox=0,oy=0){let t=0,n=0;for(let y=b.y0+oy;y<=b.y1+oy;y++)for(let x=b.x0+ox;x<=b.x1+ox;x++){if(x<0||y<0||x>767||y>767)continue;t+=Math.abs(F.G[y*768+x]);n++}return n?t/n:0}
 function shifted(F,b,target){for(const ox of[-6,0,6])for(const oy of[-6,0,6])if((ox||oy)&&strength(F,b,ox,oy)>=target*.6)return true;return false}
@@ -56,9 +69,9 @@ async function run(){
       const s=sig(c);if(last&&same(s,last.s)){last.to=rs[i].date;continue}
       const F=await frame(rs[i],cx,cy,c);F.s=s;F.date=rs[i].date;F.to=rs[i].date;frames.push(F);last=F;
     }
-    const ev=[];
+    const ev=[],{SW,NW}=stableWater(frames);
     for(let i=1;i<frames.length;i++){const A=frames[i-1],B=frames[i];if(A.water<200||B.water<200)continue;
-      for(const b of blobs(A,B,m)){
+      for(const b of blobs(A,B,m,SW,NW)){
         const sa=strength(A,b),sb=strength(B,b),type=sb>sa?'APPEARED':'DISAPPEARED';
         if(type==='APPEARED'?shifted(A,b,sb):shifted(B,b,sa))continue;
         let keep=0;
@@ -72,7 +85,7 @@ async function run(){
     ev.sort((a,b)=>b.score-a.score);
     const top=ev.filter(e=>e.keep>=1).slice(0,6);
     for(const e of top){e.ia=await crop(e.A,e.b,cx,cy);e.ib=await crop(e.B,e.b,cx,cy)}
-    let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'</p>';
+    let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'<br><b>The different photos:</b> '+frames.map((F,i)=>(i+1)+') '+F.date+(F.to!==F.date?' → '+F.to:'')).join(' · ')+'</p>';
     h+=top.length?top.map((e,i)=>'<hr><p><b>#'+(i+1)+' '+e.type+'</b> · score '+e.score+'/100'+(e.near?' · ⭐ near missing date':'')+'<br>Between <b>'+e.before+'</b> and <b>'+e.after+'</b> · '+(e.type==='APPEARED'?'stayed for '+e.keep+' later':'was there in '+e.keep+' earlier')+' photo(s) · about '+Math.round(e.L)+' × '+Math.round(e.Wd)+' ft<br>'+e.lat.toFixed(6)+', '+e.lng.toFixed(6)+'</p><div style="display:flex;gap:8px"><div><small>BEFORE</small><br><img src="'+e.ia+'"></div><div><small>AFTER</small><br><img src="'+e.ib+'"></div></div>').join(''):'<p><b>No car-sized change that stayed put was found.</b> This does not prove no car is there: deep or murky water can hide one.</p>';
     showModal(h);$('scan').textContent='V24 CHANGE CHECK COMPLETE — '+top.length+' lasting change(s).';
   }catch(e){toast('V24 change check failed: '+e.message);$('scan').textContent='V24 ERROR: '+e.message}
