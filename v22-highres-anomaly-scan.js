@@ -70,7 +70,7 @@ function brightWaterAnomaly(src){
 async function install(){
  if(window.__aquaV22Installed)return;window.__aquaV22Installed=true;
  const old=window.vehicleScan;
- if(typeof old!=='function')return;
+ if(typeof old!=='function'||(!old.__v21&&typeof cocoSsd!=='undefined'&&(window.__aquaV22Tries=(window.__aquaV22Tries||0)+1)<30)){window.__aquaV22Installed=false;setTimeout(install,1000);return}
  const scan=async function(f,rs,silent){
    let baseBest=null;try{baseBest=await old.apply(this,arguments)}catch(e){}
    const use=(f?.isPinTest?rs:rs.filter((r,i)=>i===0||i===rs.length-1||/2018|2019/.test(String(r.date))).slice(0,8));
