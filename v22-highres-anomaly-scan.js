@@ -37,7 +37,7 @@ async function mosaic(r,lat,lng){
      const jobs=[];
      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
        const yy=cy+dy;if(yy<0||yy>=n)continue;const xx=((cx+dx)%n+n)%n;
-       jobs.push(loadImage(tileUrl(r,lat,lng,z).replace(/\\{row\\}/g,yy).replace(/\\{col\\}/g,xx).replace(/\\{level\\}/g,z)).then(im=>({im,dx,dy})).catch(()=>null));
+       jobs.push(loadImage((r.itemURL||'').replace('{level}',z).replace('{row}',yy).replace('{col}',xx).replace(/\\{row\\}/g,yy).replace(/\\{col\\}/g,xx).replace(/\\{level\\}/g,z)).then(im=>({im,dx,dy})).catch(()=>null));
      }
      for(const q of (await Promise.all(jobs)).filter(Boolean)){ctx.drawImage(q.im,(q.dx+1)*256,(q.dy+1)*256,256,256);got++}
      if(got>=5){c.__aquaZoom=z;c.__aquaSourceSize=768;return c}
