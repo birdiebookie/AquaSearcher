@@ -89,7 +89,7 @@ async function install(){
          for(const c of [m]){
            const ds=await window.__aquaV22Model.detect(c,20,.08);
            for(const d of ds)if(['car','truck','boat','bus','motorcycle'].includes(d.class)){
-             const px=Math.max(d.bbox?.[2]||0,d.bbox?.[3]||0),mpp=(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**(m.__aquaZoom||18)))/256,ft=px*mpp*3.28084;
+             const px=Math.max(d.bbox?.[2]||0,d.bbox?.[3]||0),mpp=(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**(m.__aquaZoom||18))),ft=px*mpp*3.28084;
              if(ft>=6)hits.push({label:d.class,confidence:d.score,year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,highResolution:true,targetReason:p.why,zoom:m.__aquaZoom});
            }
          }
