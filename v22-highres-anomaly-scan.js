@@ -48,11 +48,13 @@ async function mosaic(r,lat,lng){
 function brightWaterAnomaly(src){
  const ctx=src.getContext('2d'),w=src.width,h=src.height,d=ctx.getImageData(0,0,w,h).data;
  const mask=new Uint8Array(w*h);
+   const water=new Uint8Array(w*h);for(let p=0,i=0;p<w*h;p++,i+=4){const r=d[i],g=d[i+1],b=d[i+2],l=(r+g+b)/3;if(l<125&&g+b>=2*r-10&&Math.max(r,g,b)-Math.min(r,g,b)<80)water[p]=1}const wl=[];for(let p=0;p<w*h;p+=7)if(water[p]){const i=p*4;wl.push((d[i]+d[i+1]+d[i+2])/3)}wl.sort((a,b)=>a-b);const wMed=wl.length?wl[wl.length>>1]:999;
  for(let y=64;y<h-64;y++)for(let x=64;x<w-64;x++){
    const i=(y*w+x)*4,r=d[i],g=d[i+1],b=d[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b),sat=mx?((mx-mn)/mx):0,lum=(r+g+b)/3;
    // Bright/neutral pixels are a useful first-pass signature for a white/light
    // vehicle against green/blue water. Keep the threshold conservative.
-   if(lum>135 && sat<0.42 && mx-mn<75)mask[y*w+x]=1;
+  // if(lum>135 && sat<0.42 && mx-mn<75)mask[y*w+x]=1;
+    if(wl.length>300&&Math.abs(lum-wMed)>28&&water[y*w+x-12]+water[y*w+x+12]+water[(y-12)*w+x]+water[(y+12)*w+x]>=3)mask[y*w+x]=1;
  }
  let best=null;
  for(let y=70;y<h-70;y+=3)for(let x=70;x<w-70;x+=3){
