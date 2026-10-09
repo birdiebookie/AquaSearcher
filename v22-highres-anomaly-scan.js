@@ -81,7 +81,7 @@ async function install(){
        const m=await mosaic(r,p.lat,p.lng),a=brightWaterAnomaly(m);
        if(a){
          visual.push({...a,year:r.date,lat:p.lat,lng:p.lng,targetReason:p.why});
-         hits.push({label:'visual anomaly',confidence:Math.min(.95,a.score/100),year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round((a.width*0.44)*10)/10,sizeQualified:a.width*0.44>=15,highResolution:true,visualAnomaly:true,targetReason:p.why,zoom:a.zoom});
+         hits.push({label:'visual anomaly',confidence:Math.min(.95,a.score/100),year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round((a.width*(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**a.zoom))*3.28084)*10)/10,sizeQualified:a.width*(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**a.zoom))*3.28084>=15,highResolution:true,visualAnomaly:true,targetReason:p.why,zoom:a.zoom});
        }
        // COCO remains secondary evidence, not the gatekeeper.
        if(typeof cocoSsd!=='undefined'){
