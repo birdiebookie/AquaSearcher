@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AquaSearcher AS2 · Entry Point Finder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--ink:#0b1f2e;--deep:#082638;--water:#1f7fb8;--sand:#f4efe4;--line:#c9d6df;--hot:#d6402b;--warm:#e89a2c;--cool:#3a8f5c;--muted:#51636f}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:"Segoe UI",Verdana,sans-serif;font-size:18px;color:var(--ink);background:var(--sand)}
+header{background:var(--deep);color:#fff;padding:12px 20px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+header h1{margin:0;font-size:1.5rem;letter-spacing:.02em}
+header span{color:#9fd3f2;font-size:1rem}
+main{display:grid;grid-template-columns:380px 1fr 420px;height:calc(100% - 58px)}
+@media(max-width:1100px){main{grid-template-columns:1fr;height:auto}#map{height:60vh}}
+aside,section{overflow:auto;padding:16px}
+#form{background:#fff;border-right:1px solid var(--line)}
+#results{background:#fff;border-left:1px solid var(--line)}
+label{display:block;font-weight:600;margin:14px 0 4px}
+input,select{width:100%;font-size:1rem;padding:10px;border:2px solid var(--line);border-radius:8px}
+input:focus,select:focus{outline:3px solid var(--water);border-color:var(--water)}
+.hint{color:var(--muted);font-size:.85rem;margin-top:4px}
+button{font-size:1.05rem;padding:12px 14px;border-radius:8px;border:0;cursor:pointer}
+.go{width:100%;margin-top:18px;background:var(--water);color:#fff;font-weight:700}
+.go:disabled{background:#8fb6cc;cursor:wait}
+.small{background:#e8eef2;color:var(--ink);margin:4px 4px 0 0;font-size:.9rem;padding:8px 10px}
+#status{margin-top:14px;padding:10px;border-radius:8px;background:#eef6fb;font-size:.95rem;min-height:2.6em}
+#weather{margin-top:12px;font-size:.92rem}
+#map{height:100%}
+.cand{border:2px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;cursor:pointer}
+.cand:hover,.cand.on{border-color:var(--water);background:#f2f9fd}
+.cand h3{margin:0 0 4px;font-size:1.1rem;display:flex;justify-content:space-between;gap:8px}
+.score{color:#fff;border-radius:6px;padding:0 8px;font-size:1rem}
+.cand ul{margin:6px 0 4px 18px;padding:0;font-size:.9rem}
+.cand a{font-size:.85rem;margin-right:10px}
+.truth{background:#fff6e0;border:2px solid var(--warm);border-radius:10px;padding:10px;margin-bottom:12px}
+.pin{color:#fff;font-weight:700;border-radius:50%;width:30px;height:30px;line-height:26px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px #0006;font-size:14px}
+#hist{position:fixed;inset:0;background:#000b;z-index:2000;display:none;overflow:auto;padding:24px}
+#hist .box{background:#fff;border-radius:12px;max-width:1300px;margin:0 auto;padding:18px}
+#hist .grid{display:flex;flex-wrap:wrap;gap:12px}
+#hist figure{margin:0;width:300px}
+#hist img,#hist canvas{width:300px;height:300px;border-radius:6px;background:#dde;cursor:zoom-in;display:block}
+#hist img.big,#hist canvas.big{width:640px;height:640px}
+#hist figure:has(.big){width:640px}
+#hist figcaption{font-size:.9rem;margin-top:4px}
+@media print{header,#form,#map,.small{display:none}main{display:block}#results{border:0}}
+</style>
+</head>
+<body>
+<header><h1>AquaSearcher AS2</h1><span>Where could the car have gone into the water?</span></header>
+<main>
+<aside id="form">
+  <label for="seen">Last seen (address or lat, lng)</label>
+  <input id="seen" placeholder="e.g. 123 Main St, Hamilton OH">
+  <label for="dest">Headed to (optional)</label>
+  <input id="dest" placeholder="Leave blank to search around last seen">
+  <div class="hint">With a destination, AS2 follows the likely driving routes. Without one, it checks every road within the radius.</div>
+  <label for="date">Date missing (optional)</label>
+  <input id="date" type="date">
+  <label for="width">How far from the road to look</label>
+  <select id="width"><option value="150">Close: 150 m (500 ft)</option><option value="300" selected>Normal: 300 m (1,000 ft)</option><option value="600">Wide: 600 m (2,000 ft)</option></select>
+  <label for="radius">Radius if no destination</label>
+  <select id="radius"><option value="1500">1 mile</option><option value="3000" selected>2 miles</option><option value="5000">3 miles</option><option value="8000">5 miles</option></select>
+  <label for="truth">Known car location, for testing (optional)</label>
+  <input id="truth" placeholder="lat, lng of where a car was found">
+  <div class="hint">Use this with solved cases to see where the real spot ranks.</div>
+  <button class="go" id="go">Find entry points</button>
+  <div id="status">Enter a last-seen location to start.</div>
+  <div id="weather"></div>
+</aside>
+<div id="map"></div>
+<section id="results"><p>Ranked entry points will appear here.</p></section>
+</main>
+<div id="hist"><div class="box"><button class="small" id="histclose" style="float:right">✕ Close</button><h2 id="histtitle" style="margin-top:0">Photo history</h2><p id="histstatus" class="hint"></p><div class="grid" id="histgrid"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+/* ================= ENGINE (pure functions) ================= */
+const AS={};
+AS.R=6371000;
+AS.proj=function(lat0,lng0){const k=Math.PI/180,cx=Math.cos(lat0*k)*AS.R*k,cy=AS.R*k;
+  return{f:(lat,lng)=>[(lng-lng0)*cx,(lat-lat0)*cy],b:(x,y)=>[lat0+y/cy,lng0+x/cx]}};
+AS.dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+AS.segDist=function(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],L=dx*dx+dy*dy;let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)};
+AS.area=function(r){let s=0;for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j][0]+r[i][0])*(r[j][1]-r[i][1]);return Math.abs(s/2)};
+AS.inside=function(p,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c};
+/* resample a polyline (meters) every step m */
+AS.resample=function(line,step){const out=[line[0]];let carry=0;
+  for(let i=1;i<line.length;i++){const a=line[i-1],b=line[i],L=AS.dist(a,b);let t=step-carry;
+    while(t<=L){out.push([a[0]+(b[0]-a[0])*t/L,a[1]+(b[1]-a[1])*t/L]);t+=step}carry=L-(t-step)}
+  return out};
+AS.heading=(a,b)=>Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;
+AS.turn=function(pts,i,k){if(i-k<0||i+k>=pts.length)return 0;let d=AS.heading(pts[i],pts[i+k])-AS.heading(pts[i-k],pts[i]);while(d>180)d-=360;while(d<-180)d+=360;return Math.abs(d)};
+/* spatial grid for segments */
+AS.Grid=function(cell){this.c=cell;this.m=new Map()};
+AS.Grid.prototype.add=function(a,b,item){const c=this.c,x0=Math.floor(Math.min(a[0],b[0])/c),x1=Math.floor(Math.max(a[0],b[0])/c),y0=Math.floor(Math.min(a[1],b[1])/c),y1=Math.floor(Math.max(a[1],b[1])/c);
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const k=x+','+y;if(!this.m.has(k))this.m.set(k,[]);this.m.get(k).push([a,b,item])}};
+AS.Grid.prototype.near=function(p,r){const c=this.c,out=[],x0=Math.floor((p[0]-r)/c),x1=Math.floor((p[0]+r)/c),y0=Math.floor((p[1]-r)/c),y1=Math.floor((p[1]+r)/c);
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const v=this.m.get(x+','+y);if(v)out.push(...v)}return out};
+AS.closest=function(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],L=dx*dx+dy*dy;let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));return[a[0]+t*dx,a[1]+t*dy]};
+AS.nearest=function(grid,p,r){let best=null,bd=Infinity,ba=null,bb=null;for(const [a,b,it] of grid.near(p,r)){const d=AS.segDist(p,a,b);if(d<bd){bd=d;best=it;ba=a;bb=b}}return bd<=r?{d:bd,item:best,q:AS.closest(p,ba,bb)}:null};
+AS.cross=function(p1,p2,p3,p4){const d=(p2[0]-p1[0])*(p4[1]-p3[1])-(p2[1]-p1[1])*(p4[0]-p3[0]);if(!d)return false;const u=((p3[0]-p1[0])*(p4[1]-p3[1])-(p3[1]-p1[1])*(p4[0]-p3[0]))/d,v=((p3[0]-p1[0])*(p2[1]-p1[1])-(p3[1]-p1[1])*(p2[0]-p1[0]))/d;return u>0&&u<1&&v>0&&v<1};
+AS.blocked1=function(grid,a,b){const m=[(a[0]+b[0])/2,(a[1]+b[1])/2],r=AS.dist(a,b)/2+2;for(const [p,q] of grid.near(m,r))if(AS.cross(a,b,p,q))return true;return false};
+AS.blocked=function(grid,a,b){if(!grid)return false;const L=AS.dist(a,b)||1,nx=-(b[1]-a[1])/L*4,ny=(b[0]-a[0])/L*4;for(const k of[-1,0,1])if(AS.blocked1(grid,[a[0]+nx*k,a[1]+ny*k],[b[0]+nx*k,b[1]+ny*k]))return true;return false};
+/* describe a water body: can it hide a car? */
+AS.waterInfo=function(t,area,isLine){t=t||{};let s=60,why=[];const name=t.name||'';
+  const type=t.waterway||t.water||t.natural||t.landuse||'water';
+  if(t.intermittent==='yes'||t.seasonal==='yes'){s-=45;why.push('mapped as sometimes dry')}
+  if(t.basin==='detention'||t.basin==='infiltration'){s-=35;why.push('dry detention basin')}
+  if(/river|canal|reservoir|lake/.test(type)||t.waterway==='riverbank'){s+=25;why.push(type)}
+  else if(/stream|ditch|drain/.test(type)){s-=15;why.push('small '+type)}
+  if(!isLine){if(area>=20000){s+=20;why.push('large ('+Math.round(area/4047)+' acres)')}
+    else if(area>=2000){s+=8;why.push('medium ('+(area/4047).toFixed(1)+' acres)')}
+    else if(area<500){s-=30;why.push('very small pond')}
+    else why.push('small pond')}
+  return{hide:Math.max(0,Math.min(100,s)),why,name,type}};
+/* main scoring of candidate points along roads */
+AS.findCandidates=function(o){
+  // o: {roads:[{pts:[[x,y]..],onRoute,name}], water:{grid}, rails:grid, ramps:[[x,y,name]], deadEnds:[[x,y,name]], maxD}
+  const maxD=o.maxD||60,far=o.far||120,raw=[];
+  for(const road of o.roads){const s=AS.resample(road.pts,10);let run=null;
+    for(let i=0;i<s.length;i++){let w=AS.nearest(o.water,s[i],far);
+      if(w&&w.d>maxD){if(!o.buildings||AS.blocked(o.buildings,s[i],w.q))w=null;else w.open=true}
+      else if(w&&w.d>15&&o.buildings&&AS.blocked(o.buildings,s[i],w.q))w=null;
+      if(w){const turn=Math.max(AS.turn(s,i,3),AS.turn(s,i,6)*.8);
+        const cand={p:s[i],d:w.d,w:w.item,turn,open:!!w.open,onRoute:road.onRoute,road:road.name,kind:w.d<4?'crosses water':w.open?'open ground to water':'road near water'};
+        if(!run)run=cand;else{const mt=Math.max(run.turn,turn);if(cand.d<run.d){run=cand}run.turn=mt}}
+      else if(run){raw.push(run);run=null}}
+    if(run)raw.push(run)}
+  for(const r of o.ramps){const w=AS.nearest(o.water,[r[0],r[1]],80);raw.push({p:[r[0],r[1]],d:w?w.d:30,w:w?w.item:null,turn:0,ramp:true,road:r[2]||'boat ramp',kind:'boat ramp'})}
+  for(const e of o.deadEnds){const w=AS.nearest(o.water,[e[0],e[1]],maxD);if(w)raw.push({p:[e[0],e[1]],d:w.d,w:w.item,turn:0,dead:true,road:e[2]||'',kind:'road dead-ends at water'})}
+  for(const c of raw){let s=0;const why=[];
+    s+=30*Math.max(0,1-c.d/far);why.push(Math.round(c.d*3.281)+' ft from water');if(c.open)why.push('nothing built between the road and the water');
+    if(c.turn>=20){s+=Math.min(20,c.turn/45*20);why.push('curve ('+Math.round(c.turn)+'°)')}
+    if(c.dead){s+=20;why.push('road ends at the water')}
+    if(c.ramp){s+=18;why.push('boat ramp: easy to drive in by mistake')}
+    if(c.onRoute){s+=10;why.push('on the likely route')}
+    if(c.d<4&&!c.ramp){why.push('road crosses water (bridge or causeway)');s-=5}
+    const rail=o.rails?AS.nearest(o.rails,c.p,20):null;if(rail){s-=20;why.push('guardrail mapped nearby')}
+    const wi=c.w||{hide:50,why:[],name:''};s+=wi.hide*.25;
+    c.score=Math.max(0,Math.min(100,Math.round(s)));c.why=why;c.water=wi}
+  raw.sort((a,b)=>b.score-a.score);
+  const out=[];for(const c of raw){if(out.some(k=>AS.dist(k.p,c.p)<90))continue;out.push(c)}
+  return out};
+/* ================= DATA SOURCES ================= */
+const $=id=>document.getElementById(id);
+const status=t=>{$('status').innerHTML=t};
+async function getJSON(url,opt,tries=2){for(let i=0;i<tries;i++){try{const r=await fetch(url,opt);if(r.ok)return await r.json();if(r.status!==429&&r.status<500)throw Error('HTTP '+r.status)}catch(e){if(i===tries-1)throw e}await new Promise(r=>setTimeout(r,1500))}throw Error('service busy')}
+async function geocode(q){const m=String(q).match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);if(m)return{lat:+m[1],lng:+m[2],label:q};
+  const j=await getJSON('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q='+encodeURIComponent(q));
+  if(!j.length)throw Error('Could not find "'+q+'"');return{lat:+j[0].lat,lng:+j[0].lon,label:j[0].display_name}}
+async function routes(a,b){const j=await getJSON('https://router.project-osrm.org/route/v1/driving/'+a.lng+','+a.lat+';'+b.lng+','+b.lat+'?alternatives=3&overview=full&geometries=geojson');
+  if(!j.routes||!j.routes.length)throw Error('No driving route found');return j.routes.map(r=>({coords:r.geometry.coordinates.map(c=>[c[1],c[0]]),km:r.distance/1000,min:r.duration/60}))}
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+async function overpass(q){let last;for(const u of OVERPASS){try{const r=await fetch(u,{method:'POST',body:q});if(r.ok)return await r.json();last=Error('HTTP '+r.status)}catch(e){last=e}}throw last||Error('OpenStreetMap busy')}
+function thin(coords,maxPts){if(coords.length<=maxPts)return coords;const s=Math.ceil(coords.length/maxPts),o=[];for(let i=0;i<coords.length;i+=s)o.push(coords[i]);o.push(coords[coords.length-1]);return o}
+async function weather(p,date){if(!date)return null;try{
+  const j=await getJSON('https://archive-api.open-meteo.com/v1/archive?latitude='+p.lat+'&longitude='+p.lng+'&start_date='+date+'&end_date='+date+'&daily=precipitation_sum,snowfall_sum,temperature_2m_min,temperature_2m_max,sunrise,sunset&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto');
+  const d=j.daily;return{rain:d.precipitation_sum[0],snow:d.snowfall_sum[0],lo:d.temperature_2m_min[0],hi:d.temperature_2m_max[0],rise:(d.sunrise[0]||'').slice(11),set:(d.sunset[0]||'').slice(11)}}catch(e){return null}}
+async function elev(lat,lng){try{const j=await getJSON('https://epqs.nationalmap.gov/v1/json?x='+lng+'&y='+lat+'&units=Feet&output=json',{},1);const v=+j.value;return isFinite(v)&&v>-1000?v:null}catch(e){return null}}
+/* ================= PHOTO HISTORY ================= */
+const NAIP='https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer';
+const WAYCFG='https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
+let wayCat=null;
+async function wayback(){if(wayCat)return wayCat;const j=await getJSON(WAYCFG);const raw=Array.isArray(j)?j:Object.values(j);
+  wayCat=raw.map(x=>{const n=x.releaseNum??x.releaseNumber;const d=x.releaseDateLabel||String(x.itemTitle||'').match(/\d{4}-\d{2}-\d{2}/)?.[0]||'';return{n,d,url:x.itemURL||('https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/'+n+'/{level}/{row}/{col}')}}).filter(r=>r.n&&r.d).sort((a,b)=>a.d<b.d?-1:1);return wayCat}
+function loadImg(u){return new Promise(res=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>res(null);i.src=u})}
+function tileXY(lat,lng,z){const n=2**z;return{x:(lng+180)/360*n,y:(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n}}
+async function wayFrame(r,lat,lng,z){const t=tileXY(lat,lng,z),cx=Math.floor(t.x),cy=Math.floor(t.y),px=(t.x-cx+1)*256,py=(t.y-cy+1)*256;
+  const c=document.createElement('canvas');c.width=c.height=360;const g=c.getContext('2d'),k=360/240;let got=0;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const im=await loadImg(r.url.replace('{level}',z).replace('{row}',cy+dy).replace('{col}',cx+dx));if(im){got++;g.drawImage(im,((dx+1)*256-px+120)*k,((dy+1)*256-py+120)*k,256*k,256*k)}}
+  if(!got)return null;g.strokeStyle='#ff2a2a';g.lineWidth=3;g.strokeRect(165,165,30,30);return c}
+function sigOf(c){try{const d=c.getContext('2d').getImageData(0,0,360,360).data,s=[];for(let y=0;y<360;y+=24)for(let x=0;x<360;x+=24){const i=(y*360+x)*4;s.push(d[i]+d[i+1]+d[i+2])}return s}catch(e){return null}}
+function sameSig(a,b){if(!a||!b)return false;let t=0;for(let i=0;i<a.length;i++)t+=Math.abs(a[i]-b[i]);return t/a.length<8}
+function addFig(el,cap){const f=document.createElement('figure');el.onclick=()=>el.classList.toggle('big');f.appendChild(el);const fc=document.createElement('figcaption');fc.innerHTML=cap;f.appendChild(fc);$('histgrid').appendChild(f)}
+async function photoHistory(c,i){$('hist').style.display='block';$('histgrid').innerHTML='';$('histtitle').textContent='Photo history for #'+(i+1)+' ('+c.lat.toFixed(5)+', '+c.lng.toFixed(5)+')';
+  const st=t=>$('histstatus').textContent=t;const ext=[];
+  // NAIP years (USDA)
+  try{st('Looking up USDA NAIP photo years…');
+    const q=await getJSON(NAIP+'/query?geometry='+c.lng+','+c.lat+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,Year,acquisition_date&returnGeometry=false&orderByFields=Year&f=json');
+    const S=20037508.342789244,mx=c.lng*S/180,my=Math.log(Math.tan((90+c.lat)*Math.PI/360))*S/Math.PI,h=60/Math.cos(c.lat*Math.PI/180);const seen=new Set();
+    for(const f of (q.features||[])){const a=f.attributes;if(seen.has(a.Year))continue;seen.add(a.Year);
+      const im=document.createElement('img');im.src=NAIP+'/exportImage?bbox='+[mx-h,my-h,mx+h,my+h].join(',')+'&bboxSR=3857&imageSR=3857&size=600,600&format=jpg&mosaicRule='+encodeURIComponent(JSON.stringify({mosaicMethod:'esriMosaicLockRaster',lockRasterIds:[a.OBJECTID]}))+'&renderingRule='+encodeURIComponent(JSON.stringify({rasterFunction:'NaturalColor'}))+'&f=image';
+      ext.push({d:String(a.Year),el:im,cap:'<b>USDA NAIP '+a.Year+'</b>'+(a.acquisition_date?' · flown '+new Date(a.acquisition_date).toISOString().slice(0,10):'')})}}catch(e){}
+  // Esri Wayback distinct photos
+  try{const rs=await wayback();let last=null,z=19;const frames=[];
+    for(let k=0;k<rs.length;k++){st('Checking Esri photo dates '+(k+1)+'/'+rs.length+' · '+frames.length+' different photos so far…');
+      const cv=await wayFrame(rs[k],c.lat,c.lng,z);if(!cv){if(k===rs.length-1&&!frames.length&&z===19){z=18;k=-1}continue}
+      const sg=sigOf(cv);if(last&&sameSig(sg,last.sg)){last.to=rs[k].d;continue}last={el:cv,sg,d:rs[k].d,to:rs[k].d};frames.push(last)}
+    frames.forEach(f=>ext.push({d:f.d,el:f.el,cap:'<b>Esri</b> '+f.d+(f.to!==f.d?' → '+f.to:'')}))}catch(e){}
+  ext.sort((a,b)=>a.d<b.d?-1:1);ext.forEach(x=>addFig(x.el,x.cap));
+  st(ext.length?ext.length+' photos, oldest first. Click any photo to enlarge it. The red box (Esri) or center (NAIP) is the spot.':'No photos could be loaded for this spot.')}
+/* ================= MAP ================= */
+const map=L.map('map').setView([39.5,-84.4],8);
+const base={
+ 'Streets':L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}),
+ 'Satellite (Esri)':L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri, Maxar, Earthstar'}),
+ 'USDA NAIP (newest)':(()=>{const l=L.tileLayer('',{maxZoom:19,attribution:'USDA NAIP via USGS'});l.getTileUrl=function(c){const S=20037508.342789244,z=2*S/2**c.z,x0=-S+c.x*z,y1=S-c.y*z;return NAIP+'/exportImage?bbox='+[x0,y1-z,x0+z,y1].join(',')+'&bboxSR=3857&imageSR=3857&size=256,256&format=jpg&f=image'};return l})(),
+ 'USGS imagery + topo':L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'USGS The National Map'})};
+base['Streets'].addTo(map);
+const over={'How often water is present (1984-2021)':L.tileLayer('https://storage.googleapis.com/global-surface-water/tiles2021/occurrence/{z}/{x}/{y}.png',{maxNativeZoom:13,maxZoom:19,opacity:.6,attribution:'EC JRC/Google'})};
+L.control.layers(base,over).addTo(map);
+let layer=L.layerGroup().addTo(map),markers=[];
+const color=s=>s>=70?'var(--hot)':s>=50?'var(--warm)':'var(--cool)';
+const hex=s=>s>=70?'#d6402b':s>=50?'#e89a2c':'#3a8f5c';
+/* ================= RUN ================= */
+async function run(){
+  $('go').disabled=true;layer.clearLayers();markers=[];$('results').innerHTML='';$('weather').innerHTML='';
+  try{
+    status('Finding the last-seen location…');
+    const A=await geocode($('seen').value.trim());
+    const destQ=$('dest').value.trim();let B=null,rts=[];
+    const W=+$('width').value;
+    if(destQ){status('Finding the destination…');B=await geocode(destQ);status('Drawing the likely driving routes…');rts=await routes(A,B)}
+    const P=AS.proj(A.lat,A.lng);
+    L.circleMarker([A.lat,A.lng],{radius:9,color:'#000',fillColor:'#fff',fillOpacity:1}).bindTooltip('Last seen').addTo(layer);
+    if(B)L.circleMarker([B.lat,B.lng],{radius:9,color:'#000',fillColor:'#1f7fb8',fillOpacity:1}).bindTooltip('Headed to').addTo(layer);
+    rts.forEach((r,i)=>L.polyline(r.coords,{color:i?'#7c5cbf':'#1f7fb8',weight:i?4:6,opacity:.8,dashArray:i?'8 6':null}).bindTooltip('Route '+(i+1)+': '+r.km.toFixed(1)+' km, '+Math.round(r.min)+' min').addTo(layer));
+    let area;
+    if(rts.length){const all=[];rts.forEach(r=>all.push(...thin(r.coords,120)));const pts=thin(all,300);
+      if(rts[0].km>120)status('Long route ('+Math.round(rts[0].km)+' km) — this may take a while…');
+      area='(around:'+W+','+pts.map(c=>c[0].toFixed(5)+','+c[1].toFixed(5)).join(',')+')'}
+    else area='(around:'+(+$('radius').value)+','+A.lat+','+A.lng+')';
+    status('Loading water, roads, guardrails and boat ramps from OpenStreetMap…');
+    const q='[out:json][timeout:120];('+
+      'way["natural"="water"]'+area+';relation["natural"="water"]'+area+';way["waterway"~"^(riverbank|river|canal|stream|ditch|drain)$"]'+area+';way["landuse"="reservoir"]'+area+';)->.w;(.w;'+
+      'way["building"](around.w:130);'+
+      'way["barrier"="guard_rail"]'+area+';nwr["leisure"="slipway"]'+area+';'+
+      'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]'+area+';'+
+      ');out geom;';
+    const data=await overpass(q);
+    const els=data.elements||[];
+    const water=new AS.Grid(60),rails=new AS.Grid(40),blds=new AS.Grid(40),ramps=[],roadsOSM=[],nodeUse=new Map();let nWater=0,nB=0;
+    const xy=g=>g.map(c=>P.f(c.lat,c.lon));
+    for(const e of els){const t=e.tags||{};
+      if(t.building&&e.geometry){const g=xy(e.geometry);for(let i=1;i<g.length;i++)blds.add(g[i-1],g[i],1);nB++;continue}
+      if(t.barrier==='guard_rail'&&e.geometry){const g=xy(e.geometry);for(let i=1;i<g.length;i++)rails.add(g[i-1],g[i],1);continue}
+      if(t.leisure==='slipway'){const c=e.type==='node'?P.f(e.lat,e.lon):e.geometry?P.f(e.geometry[0].lat,e.geometry[0].lon):e.center?P.f(e.center.lat,e.center.lon):null;if(c)ramps.push([c[0],c[1],t.name||'boat ramp']);continue}
+      if(t.highway&&e.geometry){const g=xy(e.geometry);roadsOSM.push({pts:g,name:t.name||t.ref||t.highway,ids:e.nodes||[]});(e.nodes||[]).forEach((n,i,a)=>{if(i===0||i===a.length-1)nodeUse.set(n,(nodeUse.get(n)||0)+1);else nodeUse.set(n,(nodeUse.get(n)||0)+2)});continue}
+      const isLine=!!t.waterway&&t.waterway!=='riverbank';
+      const rings=[];if(e.type==='way'&&e.geometry)rings.push(xy(e.geometry));if(e.type==='relation')for(const m of e.members||[])if(m.geometry&&m.role!=='inner')rings.push(xy(m.geometry));
+      for(const r of rings){const closed=!isLine&&r.length>3&&AS.dist(r[0],r[r.length-1])<1;const info=AS.waterInfo(t,closed?AS.area(r):0,isLine||!closed);nWater++;
+        for(let i=1;i<r.length;i++)water.add(r[i-1],r[i],info);
+        if(closed)L.polygon(r.map(p=>P.b(p[0],p[1])),{color:'#1f7fb8',weight:1,fillOpacity:.15}).addTo(layer)}}
+    if(!nWater){status('No mapped water found near this area. Try a wider search.');return}
+    const deadEnds=[];for(const r of roadsOSM){const ids=r.ids;if(ids.length<2)continue;
+      [[0,r.pts[0]],[ids.length-1,r.pts[r.pts.length-1]]].forEach(([k,p])=>{if((nodeUse.get(ids[k])||0)===1)deadEnds.push([p[0],p[1],r.name])})}
+    const roads=rts.length?rts.map((r,i)=>({pts:r.coords.map(c=>P.f(c[0],c[1])),onRoute:true,name:'Route '+(i+1)})):roadsOSM.map(r=>({pts:r.pts,onRoute:false,name:r.name}));
+    status('Scoring every place a road comes near water…');
+    const cands=AS.findCandidates({roads,water,rails,ramps,deadEnds,maxD:60,far:120,buildings:nB?blds:null});
+    status('Checking the drop from road to water for the top spots (USGS elevation)…');
+    for(const c of cands.slice(0,15)){const ll=P.b(c.p[0],c.p[1]);c.lat=ll[0];c.lng=ll[1];c.elev=await elev(ll[0],ll[1])}
+    cands.forEach(c=>{if(c.lat==null){const ll=P.b(c.p[0],c.p[1]);c.lat=ll[0];c.lng=ll[1]}});
+    const wx=await weather(A,$('date').value);
+    if(wx)$('weather').innerHTML='<b>That day ('+$('date').value+'):</b> low '+Math.round(wx.lo)+'°F, high '+Math.round(wx.hi)+'°F · rain '+(wx.rain??0)+' in'+(wx.snow?' · snow '+wx.snow+' in':'')+' · sunset '+wx.set+(wx.lo<=32&&(wx.rain>0||wx.snow>0)?'<br><b>Icy conditions likely.</b>':wx.rain>=.25?'<br><b>Wet roads that day.</b>':'');
+    render(cands,P);
+    const all=L.featureGroup(layer.getLayers().filter(l=>l.getBounds||l.getLatLng));try{map.fitBounds(all.getBounds(),{padding:[30,30]})}catch(e){}
+    status('Done: '+cands.length+' entry points ranked from '+nWater+' mapped water features.'+(rts.length?' Checked '+rts.length+' route(s).':''));
+  }catch(e){console.error(e);status('<b>Stopped:</b> '+e.message+'. Please try again in a minute.')}
+  finally{$('go').disabled=false}}
+function links(c){const ll=c.lat.toFixed(6)+','+c.lng.toFixed(6);
+  return'<a target="_blank" href="https://earth.google.com/web/@'+ll+',60a,250d,35y,0h,0t,0r">Google Earth</a><a target="_blank" href="https://livingatlas.arcgis.com/wayback/#mapCenter='+c.lng.toFixed(6)+'%2C'+c.lat.toFixed(6)+'%2C19">Esri Wayback</a><a target="_blank" href="https://www.google.com/maps/@'+ll+',60m/data=!3m1!1e3">Google Maps</a>'}
+function render(cands,P){const box=$('results');let h='<h2 style="margin-top:0">Top entry points</h2><button class="small" onclick="window.print()">Print report</button><button class="small" id="csv">Download CSV</button>';
+  const tq=$('truth').value.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if(tq){const t=P.f(+tq[1],+tq[2]);let bi=-1,bd=Infinity;cands.forEach((c,i)=>{const d=AS.dist(c.p,t);if(d<bd){bd=d;bi=i}});
+    L.marker([+tq[1],+tq[2]]).bindTooltip('Known car location').addTo(layer);
+    h+='<div class="truth"><b>Test result:</b> '+(bi<0?'no candidates':bd<=150?'the known car spot matches <b>#'+(bi+1)+'</b> of '+cands.length+' ('+Math.round(bd*3.281)+' ft away).'+(bi<10?' ✅ Top 10!':''):'closest candidate is <b>#'+(bi+1)+'</b> of '+cands.length+', but it is '+Math.round(bd*3.281)+' ft from the known spot — a miss.')+'</div>'}
+  if(!cands.length)h+='<p>No places where a road comes within about 200 ft of mapped water.</p>';
+  const shown=cands.slice(0,100);if(cands.length>100)h+='<p class="hint">Showing the top 100 of '+cands.length+' spots. The CSV has all of them.</p>';
+  shown.forEach((c,i)=>{const wname=c.water.name?c.water.name+' · ':'';
+    h+='<div class="cand" id="c'+i+'"><h3><span>#'+(i+1)+' '+c.kind+'</span><span class="score" style="background:'+color(c.score)+'">'+c.score+'</span></h3>'+
+    '<div>'+(c.road||'')+'</div><div class="hint">'+wname+'can it hide a car? '+(c.water.hide>=60?'likely':c.water.hide>=35?'maybe':'unlikely')+(c.water.why.length?' ('+c.water.why.join(', ')+')':'')+'</div>'+
+    '<ul>'+c.why.map(w=>'<li>'+w+'</li>').join('')+(c.elev!=null?'<li>road elevation '+Math.round(c.elev)+' ft</li>':'')+'</ul>'+
+    '<div class="hint">'+c.lat.toFixed(6)+', '+c.lng.toFixed(6)+'</div>'+links(c)+'<br><button class="small" data-hist="'+i+'">📷 Photo history</button></div>';
+    const m=L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:'<div class="pin" style="background:'+hex(c.score)+'">'+(i+1)+'</div>',iconSize:[30,30],iconAnchor:[15,15]})}).addTo(layer);
+    m.on('click',()=>focus(i));markers.push(m)});
+  box.innerHTML=h;shown.forEach((c,i)=>$('c'+i).onclick=e=>{if(e.target.dataset.hist!=null){e.stopPropagation();photoHistory(c,i);return}if(e.target.tagName!=='A')focus(i)});
+  $('csv').onclick=()=>{const rows=[['rank','score','type','road','lat','lng','feet_from_water','water','can_hide','reasons']].concat(cands.map((c,i)=>[i+1,c.score,c.kind,c.road,c.lat.toFixed(6),c.lng.toFixed(6),Math.round(c.d*3.281),c.water.name||c.water.type,c.water.hide,c.why.join('; ')]));
+    const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='AS1-entry-points.csv';a.click()};
+  window.__AS1=cands}
+function focus(i){const c=window.__AS1[i];map.setView([c.lat,c.lng],18);document.querySelectorAll('.cand').forEach(e=>e.classList.remove('on'));const el=$('c'+i);el.classList.add('on');el.scrollIntoView({block:'nearest'})}
+$('go').onclick=run;$('histclose').onclick=()=>{$('hist').style.display='none'};
+document.querySelectorAll('input').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')run()}));
+</script>
+</body>
+</html>
