@@ -225,6 +225,7 @@ async function run(){
     const W=+$('width').value;
     if(destQ){status('Finding the destination…');B=await geocode(destQ);status('Drawing the likely driving routes…');rts=await routes(A,B)}
     const P=AS.proj(A.lat,A.lng);
+        if(rts.length)map.fitBounds(L.polyline(rts[0].coords).getBounds(),{padding:[30,30]});else{map.setView([A.lat,A.lng],13);L.circle([A.lat,A.lng],{radius:+$('radius').value,color:'#1f7fb8',weight:2,fill:false,dashArray:'6 6'}).addTo(layer)}
     L.circleMarker([A.lat,A.lng],{radius:9,color:'#000',fillColor:'#fff',fillOpacity:1}).bindTooltip('Last seen').addTo(layer);
     if(B)L.circleMarker([B.lat,B.lng],{radius:9,color:'#000',fillColor:'#1f7fb8',fillOpacity:1}).bindTooltip('Headed to').addTo(layer);
     rts.forEach((r,i)=>L.polyline(r.coords,{color:i?'#7c5cbf':'#1f7fb8',weight:i?4:6,opacity:.8,dashArray:i?'8 6':null}).bindTooltip('Route '+(i+1)+': '+r.km.toFixed(1)+' km, '+Math.round(r.min)+' min').addTo(layer));
