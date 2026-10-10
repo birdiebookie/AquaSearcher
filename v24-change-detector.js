@@ -106,7 +106,7 @@ async function run(){
         ev.push({type,before:A.to,after:B.date,keep,score,near,L:b.L,Wd:b.Wd,lat:ll.lat,lng:ll.lng,A,B,b});
       }}
     ev.sort((a,b)=>b.score-a.score);
-    const top=ev.filter(e=>e.keep>=1).slice(0,6);
+    const top=(ev.some(e=>e.keep>=1)?ev.filter(e=>e.keep>=1):ev).slice(0,6);
     for(const e of top){e.ia=await crop(e.A,e.b,cx,cy);e.ib=await crop(e.B,e.b,cx,cy)}
     let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'<br><b>Water used:</b> '+(OM?'OpenStreetMap water map':'photo colors (no OSM water found)')+' · '+Math.round(wp*100/SW.length)+'% of the view'+'<br><b>The different photos:</b> '+frames.map((F,i)=>(i+1)+') '+F.date+(F.to!==F.date?' → '+F.to:'')).join(' · ')+'</p>';
     h+=top.length?top.map((e,i)=>'<hr><p><b>#'+(i+1)+' '+e.type+'</b> · score '+e.score+'/100'+(e.near?' · ⭐ near missing date':'')+'<br>Between <b>'+e.before+'</b> and <b>'+e.after+'</b> · '+(e.type==='APPEARED'?'stayed for '+e.keep+' later':'was there in '+e.keep+' earlier')+' photo(s) · about '+Math.round(e.L)+' × '+Math.round(e.Wd)+' ft<br>'+e.lat.toFixed(6)+', '+e.lng.toFixed(6)+'</p><div style="display:flex;gap:8px"><div><small>BEFORE</small><br><img src="'+e.ia+'"></div><div><small>AFTER</small><br><img src="'+e.ib+'"></div></div>').join(''):'<p><b>No car-sized change that stayed put was found.</b> This does not prove no car is there: deep or murky water can hide one.</p>';
