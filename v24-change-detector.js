@@ -29,7 +29,7 @@ async function frame(r,cx,cy,center,OM){
 }
 function blobs(A,B,m,SW,NW){
   const N=768*768,on=new Uint8Array(N),seen=new Uint8Array(N),out=[];
-  for(let y=20;y<748;y++)for(let x=20;x<748;x++){const p=y*768+x;if(NW[p]&&Math.abs(B.G[p]-A.G[p])>30)on[p]=1}
+  for(let y=20;y<748;y++)for(let x=20;x<748;x++){const p=y*768+x;if(NW[p]&&Math.abs(B.G[p]-A.G[p])>20)on[p]=1}
   for(let s=0;s<N;s++){if(!on[s]||seen[s])continue;
     const q=[s];seen[s]=1;let n=0,x0=768,x1=0,y0=768,y1=0;
     while(q.length){const p=q.pop(),x=p%768,y=(p/768)|0;n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
@@ -37,7 +37,7 @@ function blobs(A,B,m,SW,NW){
     const L=Math.max(x1-x0+1,y1-y0+1)*m*3.281,Wd=Math.min(x1-x0+1,y1-y0+1)*m*3.281,fill=n/((x1-x0+1)*(y1-y0+1));
     if(L<9||L>26||Wd<3.5||Wd>12||fill<.35)continue;
     const cx=(x0+x1)>>1,cy=(y0+y1)>>1,ring=[[cx,y0-12],[cx,y1+12],[x0-12,cy],[x1+12,cy]].filter(([a,b])=>a>=0&&b>=0&&a<768&&b<768&&SW[b*768+a]).length;
-    if(ring<3)continue;
+    if(ring<2)continue;
     out.push({x0,x1,y0,y1,cx,cy,L,Wd});
   }
   return out;
@@ -110,10 +110,11 @@ async function run(){
     for(const e of top){e.ia=await crop(e.A,e.b,cx,cy);e.ib=await crop(e.B,e.b,cx,cy)}
     let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'<br><b>Water used:</b> '+(OM?'OpenStreetMap water map':'photo colors (no OSM water found)')+' · '+Math.round(wp*100/SW.length)+'% of the view'+'<br><b>The different photos:</b> '+frames.map((F,i)=>(i+1)+') '+F.date+(F.to!==F.date?' → '+F.to:'')).join(' · ')+'</p>';
     h+=top.length?top.map((e,i)=>'<hr><p><b>#'+(i+1)+' '+e.type+'</b> · score '+e.score+'/100'+(e.near?' · ⭐ near missing date':'')+'<br>Between <b>'+e.before+'</b> and <b>'+e.after+'</b> · '+(e.type==='APPEARED'?'stayed for '+e.keep+' later':'was there in '+e.keep+' earlier')+' photo(s) · about '+Math.round(e.L)+' × '+Math.round(e.Wd)+' ft<br>'+e.lat.toFixed(6)+', '+e.lng.toFixed(6)+'</p><div style="display:flex;gap:8px"><div><small>BEFORE</small><br><img src="'+e.ia+'"></div><div><small>AFTER</small><br><img src="'+e.ib+'"></div></div>').join(''):'<p><b>No car-sized change that stayed put was found.</b> This does not prove no car is there: deep or murky water can hide one.</p>';
-    showModal(h);$('scan').textContent='V24 CHANGE CHECK COMPLETE — '+top.length+' lasting change(s).';
+    h+=await strip(frames,cx,cy,t);showModal(h);$('scan').textContent='V24 CHANGE CHECK COMPLETE — '+top.length+' lasting change(s).';
   }catch(e){toast('V24 change check failed: '+e.message);$('scan').textContent='V24 ERROR: '+e.message}
 }
 window.runV24ChangeCheck=run;
+async function strip(frames,cx,cy,t){const out=[];for(const F of frames){const c=document.createElement('canvas');c.width=c.height=180;const g=c.getContext('2d'),px=(t.x-cx+1)*256,py=(t.y-cy+1)*256,k=180/240;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const im=await get(url(F.r,Z,cx+dx,cy+dy));if(im)g.drawImage(im,((dx+1)*256-px+120)*k,((dy+1)*256-py+120)*k,256*k,256*k)}g.strokeStyle='red';g.lineWidth=2;g.strokeRect(80,80,20,20);let s='';try{s=c.toDataURL('image/jpeg',.85)}catch(e){}out.push('<div><small>'+F.date+'</small><br><img src="'+s+'"></div>')}return'<hr><p><b>Photo strip at your pin</b> (red box = pin). Can you see the car in any of these?</p><div style="display:flex;flex-wrap:wrap;gap:6px">'+out.join('')+'</div>'}
 function install(){
   if($('v24btn'))return;const host=document.querySelector('.detail > div:nth-child(2) > div:last-child');if(!host)return;
   const i=document.createElement('input');i.id='v24since';i.placeholder='Missing since year (optional)';i.style.cssText='width:100%;padding:8px;margin:4px 0;border-radius:6px;border:1px solid #9ab';
