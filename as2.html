@@ -154,6 +154,23 @@ async function geocode(q){const m=String(q).match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d
 async function routes(a,b){const j=await getJSON('https://router.project-osrm.org/route/v1/driving/'+a.lng+','+a.lat+';'+b.lng+','+b.lat+'?alternatives=3&overview=full&geometries=geojson');
   if(!j.routes||!j.routes.length)throw Error('No driving route found');return j.routes.map(r=>({coords:r.geometry.coordinates.map(c=>[c[1],c[0]]),km:r.distance/1000,min:r.duration/60}))}
 const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+  async function overpassF(q){try{const r=await fetch('/api/osm?q='+encodeURIComponent(q),{signal:AbortSignal.timeout(62000)});if(r.ok)return await r.json()}catch(e){}let last;for(const u of OVERPASS){try{const r=await fetch(u,{method:'POST',body:q,signal:AbortSignal.timeout(40000)});if(r.ok)return await r.json();last=Error('HTTP '+r.status)}catch(e){last=e}}throw last||Error('map data unavailable')}
+async function chunked2(rts,A,W){const HW='way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]';
+  const qFor=a=>'[out:json][timeout:90];(way["natural"="water"]'+a+';relation["natural"="water"]'+a+';way["waterway"~"^(riverbank|river|canal|stream|ditch|drain)$"]'+a+';way["landuse"="reservoir"]'+a+';)->.w;(.w;way["building"](around.w:130)'+(a.startsWith('(around')?'':a)+';way["barrier"="guard_rail"]'+a+';nwr["leisure"="slipway"]'+a+';'+HW+a+';);out geom;';
+  const areas=[];
+  if(rts.length){const all=[];rts.forEach(r=>all.push(...thin(r.coords,400)));const pts=thin(all,600);for(let i=0;i<pts.length;i+=40){const seg=pts.slice(Math.max(0,i-1),i+40);if(seg.length>1)areas.push('(around:'+W+','+seg.map(c=>c[0].toFixed(5)+','+c[1].toFixed(5)).join(',')+')')}}
+  else{const R=+$('radius').value,dl=R/111320,dg=R/(111320*Math.cos(A.lat*Math.PI/180)),n=Math.max(1,Math.ceil(R/1500));
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){const s=A.lat-dl+2*dl*i/n,nn=A.lat-dl+2*dl*(i+1)/n,w=A.lng-dg+2*dg*j/n,e=A.lng-dg+2*dg*(j+1)/n;areas.push('('+s.toFixed(6)+','+w.toFixed(6)+','+nn.toFixed(6)+','+e.toFixed(6)+')')}}
+  const seen=new Map();let skipped=0,done=0,total=areas.length;
+  const split=a=>{if(!a.startsWith('(around')){const[s,w,n,e]=a.slice(1,-1).split(',').map(Number),ms=(s+n)/2,mw=(w+e)/2;return[[s,w,ms,mw],[s,mw,ms,e],[ms,w,n,mw],[ms,mw,n,e]].map(x=>'('+x.map(v=>v.toFixed(6)).join(',')+')')}
+    const m=a.match(/^\(around:(\d+),(.*)\)$/),c=m[2].split(','),p=[];for(let i=0;i+1<c.length;i+=2)p.push(c[i]+','+c[i+1]);if(p.length<4)return[];const h=p.length>>1;return[p.slice(0,h+1),p.slice(h)].map(x=>'(around:'+m[1]+','+x.join(',')+')')};
+  const load=async(a,depth)=>{status('Loading map data from OpenStreetMap, piece '+(++done)+' of '+total+'…');
+    try{const j=await overpassF(qFor(a));for(const e of j.elements||[])seen.set(e.type+e.id,e)}
+    catch(err){const parts=depth<2?split(a):[];if(parts.length){total+=parts.length;for(const p of parts)await load(p,depth+1)}else skipped++}};
+  for(const a of areas)await load(a,0);
+  let note=$('skipnote');if(!note){note=document.createElement('div');note.id='skipnote';note.className='hint';note.style.marginTop='8px';$('status').after(note)}
+  note.textContent=skipped?'⚠ '+skipped+' small piece(s) of the map could not be loaded, so a few spots in those areas may be missing. Try again later to fill them in.':'';
+  return{elements:[...seen.values()]}}
   async function overpassT(q){try{const r=await fetch('/api/osm?q='+encodeURIComponent(q),{signal:AbortSignal.timeout(65000)});if(r.ok)return await r.json()}catch(e){}let last;for(let round=0;round<2;round++)for(const u of OVERPASS){try{const r=await fetch(u,{method:'POST',body:q,signal:AbortSignal.timeout(95000)});if(r.ok)return await r.json();last=Error('OpenStreetMap HTTP '+r.status)}catch(e){last=e}}throw last||Error('OpenStreetMap busy')}
 async function chunked(rts,A,W){const areas=[],HW='way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]';
   if(rts.length){const all=[];rts.forEach(r=>all.push(...thin(r.coords,400)));const pts=thin(all,600);for(let i=0;i<pts.length;i+=50){const seg=pts.slice(Math.max(0,i-1),i+50);if(seg.length>1)areas.push('(around:'+W+','+seg.map(c=>c[0].toFixed(5)+','+c[1].toFixed(5)).join(',')+')')}}
@@ -241,7 +258,7 @@ async function run(){
       'way["barrier"="guard_rail"]'+area+';nwr["leisure"="slipway"]'+area+';'+
       'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]'+area+';'+
       ');out geom;';
-    const data=await chunked(rts,A,W);
+    const data=await chunked2(rts,A,W);
     const els=data.elements||[];
     const water=new AS.Grid(60),rails=new AS.Grid(40),blds=new AS.Grid(40),ramps=[],roadsOSM=[],nodeUse=new Map();let nWater=0,nB=0;
     const xy=g=>g.map(c=>P.f(c.lat,c.lon));
