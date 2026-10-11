@@ -192,7 +192,7 @@ const NAIP='https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery
 const WAYCFG='https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
 let wayCat=null;
 async function wayback(){if(wayCat)return wayCat;const j=await getJSON(WAYCFG);const raw=Array.isArray(j)?j:Object.values(j);
-  wayCat=raw.map(x=>{const n=x.releaseNum??x.releaseNumber;const d=x.releaseDateLabel||String(x.itemTitle||'').match(/\d{4}-\d{2}-\d{2}/)?.[0]||'';return{n,d,url:x.itemURL||('https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/'+n+'/{level}/{row}/{col}')}}).filter(r=>r.n&&r.d).sort((a,b)=>a.d<b.d?-1:1);return wayCat}
+  wayCat=raw.map(x=>{const n=x.releaseNum??x.releaseNumber??(String(x.itemURL||'').match(/tile\/(\d+)\//)||[])[1];const d=x.releaseDateLabel||String(x.itemTitle||'').match(/\d{4}-\d{2}-\d{2}/)?.[0]||'';return{n,d,url:x.itemURL||('https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/'+n+'/{level}/{row}/{col}')}}).filter(r=>r.n&&r.d).sort((a,b)=>a.d<b.d?-1:1);return wayCat}
 function loadImg(u){return new Promise(res=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>res(null);i.src=u})}
 function tileXY(lat,lng,z){const n=2**z;return{x:(lng+180)/360*n,y:(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n}}
 async function wayFrame(r,lat,lng,z){const t=tileXY(lat,lng,z),cx=Math.floor(t.x),cy=Math.floor(t.y),px=(t.x-cx+1)*256,py=(t.y-cy+1)*256;
@@ -208,7 +208,7 @@ async function photoHistory(c,i){$('hist').style.display='block';$('histgrid').i
   try{st('Looking up USDA NAIP photo years…');
     const q=await getJSON(NAIP+'/query?geometry='+c.lng+','+c.lat+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID,Year,acquisition_date&returnGeometry=false&orderByFields=Year&f=json');
     const S=20037508.342789244,mx=c.lng*S/180,my=Math.log(Math.tan((90+c.lat)*Math.PI/360))*S/Math.PI,h=60/Math.cos(c.lat*Math.PI/180);const seen=new Set();
-    for(const f of (q.features||[])){const a=f.attributes;if(seen.has(a.Year))continue;seen.add(a.Year);
+    for(const f of (q.features||[])){const a=f.attributes;if(!a.Year||seen.has(a.Year))continue;seen.add(a.Year);
       const im=document.createElement('img');im.src=NAIP+'/exportImage?bbox='+[mx-h,my-h,mx+h,my+h].join(',')+'&bboxSR=3857&imageSR=3857&size=600,600&format=jpg&mosaicRule='+encodeURIComponent(JSON.stringify({mosaicMethod:'esriMosaicLockRaster',lockRasterIds:[a.OBJECTID]}))+'&renderingRule='+encodeURIComponent(JSON.stringify({rasterFunction:'NaturalColor'}))+'&f=image';
       ext.push({d:String(a.Year),el:im,cap:'<b>USDA NAIP '+a.Year+'</b>'+(a.acquisition_date?' · flown '+new Date(a.acquisition_date).toISOString().slice(0,10):'')})}}catch(e){}
   // Esri Wayback distinct photos
