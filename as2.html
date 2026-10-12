@@ -229,23 +229,34 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
   if(frames.length<2)return{boost:0,text:'📷 Photo check: not enough different photos to compare.'};
   const mc=document.createElement('canvas');mc.width=mc.height=S;const g=mc.getContext('2d');g.fillStyle=g.strokeStyle='#fff';
   const px=p=>[S/2+(p[0]-c.p[0])/mpc,S/2-(p[1]-c.p[1])/mpc],R=S*mpc;
-  for(const r of ctx.rings){if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)continue;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});
-    if(r.line){g.lineWidth=Math.max(6,12/mpc);g.stroke()}else{g.closePath();g.fill()}}
-  const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N);let nw=0;for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
+  const drawRing=(r,erase)=>{if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)return;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=g.strokeStyle='#fff';if(r.line){g.lineWidth=Math.max(6,12/mpc);g.stroke()}else{g.closePath();g.fill()}};
+  for(const r of ctx.rings)if(!r.hole)drawRing(r,false);
+  for(const r of ctx.rings)if(r.hole)drawRing(r,true);
+  g.globalCompositeOperation='source-over';
+  const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N),WI=new Uint8Array(N);let nw=0;
+  for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
   if(nw<800)return{boost:0,text:'📷 Photo check: too little mapped water in view to compare.'};
+  // Conservative interior mask: require a pixel to be at least 10 pixels inside mapped water.
+  // This rejects shoreline edges, road-side objects, and uncertain water-boundary pixels.
+  const erode=10;
+  for(let y=erode;y<S-erode;y++)for(let x=erode;x<S-erode;x++){let ok=true;
+    for(let dy=-erode;dy<=erode&&ok;dy+=2)for(let dx=-erode;dx<=erode;dx+=2){if(dx*dx+dy*dy>erode*erode)continue;if(!W[(y+dy)*S+x+dx]){ok=false;break}}
+    if(ok)WI[y*S+x]=1}
+  let ni=0;for(let p=0;p<N;p++)ni+=WI[p];
+  if(ni<100)return{boost:0,text:'📷 Photo check: no reliable interior-water area in view; no underwater anomaly scored.'};
   const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0)s.push(G[p])}
     s.sort((a,b)=>a-b);const med=s.length?s[s.length>>1]:100;for(let p=0;p<N;p++)G[p]-=med;return{G,d:f.d,to:f.to}});
   const str=(f,b,ox=0,oy=0)=>{let t=0,n=0;for(let y=b.y0+oy;y<=b.y1+oy;y++)for(let x=b.x0+ox;x<=b.x1+ox;x++){if(x<0||y<0||x>=S||y>=S)continue;t+=Math.abs(f.G[y*S+x]);n++}return n?t/n:0};
   const shifted=(f,b,tg)=>{for(const ox of[-20,0,20])for(const oy of[-20,0,20])if((ox||oy)&&str(f,b,ox,oy)>=tg*.6)return true;return false};
   let best=null;
   for(let i=1;i<F.length;i++){const A=F[i-1],B=F[i],on=new Uint8Array(N),seen=new Uint8Array(N);
-    for(let y=8;y<S-8;y++)for(let x=8;x<S-8;x++){const p=y*S+x;if(W[p]&&Math.abs(B.G[p]-A.G[p])>22)on[p]=1}
+    for(let y=8;y<S-8;y++)for(let x=8;x<S-8;x++){const p=y*S+x;if(WI[p]&&Math.abs(B.G[p]-A.G[p])>22)on[p]=1}
     for(let s=0;s<N;s++){if(!on[s]||seen[s])continue;const q=[s];seen[s]=1;let n=0,x0=S,x1=0,y0=S,y1=0;
       while(q.length){const p=q.pop(),x=p%S,y=(p/S)|0;n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;for(const o of[1,-1,S,-S]){const k=p+o;if(k>=0&&k<N&&on[k]&&!seen[k]){seen[k]=1;q.push(k)}}}
       const Lm=Math.max(x1-x0+1,y1-y0+1)*mpc,Wm=Math.min(x1-x0+1,y1-y0+1)*mpc,fill=n/((x1-x0+1)*(y1-y0+1));
       if(Lm<2.5||Lm>8.5||Wm<1||Wm>3.6||fill<.35)continue;
       const b={x0,x1,y0,y1},cx=(x0+x1)>>1,cy=(y0+y1)>>1;
-      if([[cx,y0-25],[cx,y1+25],[x0-25,cy],[x1+25,cy]].filter(([a,bb])=>a>=0&&bb>=0&&a<S&&bb<S&&W[bb*S+a]).length<2)continue;
+      if([[cx,y0-25],[cx,y1+25],[x0-25,cy],[x1+25,cy]].filter(([a,bb])=>a>=0&&bb>=0&&a<S&&bb<S&&WI[bb*S+a]).length<2)continue;
       const sa=str(A,b),sb=str(B,b),type=sb>sa?'appeared':'disappeared';if(type==='appeared'?shifted(A,b,sb):shifted(B,b,sa))continue;
       let keep=0;if(type==='appeared'){for(let j=i+1;j<F.length;j++)if(str(F[j],b)>Math.max(16,sa+10))keep++;else break}else{for(let j=i-2;j>=0;j--)if(str(F[j],b)>Math.max(16,sb+10))keep++;else break}
       const after=since&&String(B.d)>=since;let sc=25+keep*15+Math.abs(sb-sa)/2+(after&&type==='appeared'?20:0);
@@ -308,8 +319,8 @@ async function run(){
       if(t.leisure==='slipway'){const c=e.type==='node'?P.f(e.lat,e.lon):e.geometry?P.f(e.geometry[0].lat,e.geometry[0].lon):e.center?P.f(e.center.lat,e.center.lon):null;if(c)ramps.push([c[0],c[1],t.name||'boat ramp']);continue}
       if(t.highway&&e.geometry){const g=xy(e.geometry);roadsOSM.push({pts:g,name:t.name||t.ref||t.highway,ids:e.nodes||[]});(e.nodes||[]).forEach((n,i,a)=>{if(i===0||i===a.length-1)nodeUse.set(n,(nodeUse.get(n)||0)+1);else nodeUse.set(n,(nodeUse.get(n)||0)+2)});continue}
       const isLine=!!t.waterway&&t.waterway!=='riverbank';
-      const rings=[];if(e.type==='way'&&e.geometry)rings.push(xy(e.geometry));if(e.type==='relation')for(const m of e.members||[])if(m.geometry&&m.role!=='inner')rings.push(xy(m.geometry));
-      for(const r of rings){const closed=!isLine&&r.length>3&&AS.dist(r[0],r[r.length-1])<1;{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of r){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1]}wRings.push({pts:r,line:!closed,x0,x1,y0,y1})}const info=AS.waterInfo(t,closed?AS.area(r):0,isLine||!closed);nWater++;
+      const rings=[];if(e.type==='way'&&e.geometry)rings.push({pts:xy(e.geometry),hole:false});if(e.type==='relation')for(const m of e.members||[])if(m.geometry)rings.push({pts:xy(m.geometry),hole:m.role==='inner'});
+      for(const item of rings){const r=item.pts,closed=!isLine&&r.length>3&&AS.dist(r[0],r[r.length-1])<1;{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of r){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1]}wRings.push({pts:r,line:!closed,hole:item.hole,x0,x1,y0,y1})}if(item.hole)continue;const info=AS.waterInfo(t,closed?AS.area(r):0,isLine||!closed);nWater++;
         for(let i=1;i<r.length;i++)water.add(r[i-1],r[i],info);
         if(closed)L.polygon(r.map(p=>P.b(p[0],p[1])),{color:'#1f7fb8',weight:1,fillOpacity:.15}).addTo(layer)}}
     if(!nWater){status('No mapped water found near this area. Try a wider search.');return}
