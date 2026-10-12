@@ -261,15 +261,15 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
       let keep=0;if(type==='appeared'){for(let j=i+1;j<F.length;j++)if(str(F[j],b)>Math.max(16,sa+10))keep++;else break}else{for(let j=i-2;j>=0;j--)if(str(F[j],b)>Math.max(16,sb+10))keep++;else break}
       const after=since&&String(B.d)>=since;let sc=25+keep*15+Math.abs(sb-sa)/2+(after&&type==='appeared'?20:0);
       if(!best||sc>best.sc)best={sc,type,keep,a:A.to,b:B.d,Lft:Math.round(Lm*3.281),Wft:Math.round(Wm*3.281)}}}
-  if(!best)return{boost:0,text:'📷 Photo check ('+frames.length+' photos): no car-sized change seen in the water.'};
+  if(!best)return{boost:0,text:'📷 Photo check ('+frames.length+' photos): no qualifying car-sized image change inside the mapped-water interior.'};
   const boost=best.keep>=1?Math.min(15,Math.round(best.sc/6)):0;
-  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized object '+best.type+' between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' +'+boost+' points.':' Seen in only one photo, so no points added.')}}
+  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized image change '+best.type+' within mapped-water interior between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' +'+boost+' points.':' Seen in only one photo, so no points added.')}}
 async function anomalyAll(cands,P){const btn=$('anom');if(btn)btn.disabled=true;const ctx=window.__AS2ctx,since=$('date').value||'',n=Math.min(15,cands.length);
   for(let i=0;i<n;i++){const c=cands[i];if(c.anom)continue;
     try{const fr=await esriFrames(c,(k,t,f)=>status('Photo check: spot '+(i+1)+' of '+n+' · photo date '+k+' of '+t+' · '+f+' different photos'));c.anom=anomalyScore(c,fr,ctx,since);c.score=Math.min(100,c.score+c.anom.boost)}
     catch(e){c.anom={boost:0,text:'📷 Photo check could not run for this spot.'}}}
   cands.sort((a,b)=>b.score-a.score);render(cands,P);const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
-  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) showed a lasting car-sized change and moved up. Note: photo dates are when Esri published them.')}
+  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) showed a lasting car-sized image change within mapped-water interior and moved up. Note: photo dates are when Esri published them.')}
 /* ================= MAP ================= */
 const map=L.map('map').setView([39.5,-84.4],8);
 const base={
