@@ -119,26 +119,27 @@ AS.waterInfo=function(t,area,isLine){t=t||{};let s=60,why=[];const name=t.name||
 /* main scoring of candidate points along roads */
 AS.findCandidates=function(o){
   // o: {roads:[{pts:[[x,y]..],onRoute,name}], water:{grid}, rails:grid, ramps:[[x,y,name]], deadEnds:[[x,y,name]], maxD}
-  const maxD=o.maxD||60,far=o.far||120,raw=[];
+  // Only retain genuine near-water access candidates. Place the marker at the mapped water edge/feature,
+  // not on the nearby road; ordinary roads tens or hundreds of feet away are not entry points.
+  const maxD=20,far=20,raw=[];
   for(const road of o.roads){const s=AS.resample(road.pts,10);let run=null;
-    for(let i=0;i<s.length;i++){let w=AS.nearest(o.water,s[i],far);
-      if(w&&w.d>maxD){if(!o.buildings||AS.blocked(o.buildings,s[i],w.q))w=null;else w.open=true}
-      else if(w&&w.d>15&&o.buildings&&AS.blocked(o.buildings,s[i],w.q))w=null;
+    for(let i=0;i<s.length;i++){const w=AS.nearest(o.water,s[i],maxD);
+      if(w&&o.buildings&&AS.blocked(o.buildings,s[i],w.q))w=null;
       if(w){const turn=Math.max(AS.turn(s,i,3),AS.turn(s,i,6)*.8);
-        const cand={p:s[i],d:w.d,w:w.item,turn,open:!!w.open,onRoute:road.onRoute,road:road.name,kind:w.d<4?'crosses water':w.open?'open ground to water':'road near water'};
+        const cand={p:w.q,roadP:s[i],d:w.d,w:w.item,turn,open:false,onRoute:road.onRoute,road:road.name,kind:'water-entry access point'};
         if(!run)run=cand;else{const mt=Math.max(run.turn,turn);if(cand.d<run.d){run=cand}run.turn=mt}}
       else if(run){raw.push(run);run=null}}
     if(run)raw.push(run)}
-  for(const r of o.ramps){const w=AS.nearest(o.water,[r[0],r[1]],80);raw.push({p:[r[0],r[1]],d:w?w.d:30,w:w?w.item:null,turn:0,ramp:true,road:r[2]||'boat ramp',kind:'boat ramp'})}
-  for(const e of o.deadEnds){const w=AS.nearest(o.water,[e[0],e[1]],maxD);if(w)raw.push({p:[e[0],e[1]],d:w.d,w:w.item,turn:0,dead:true,road:e[2]||'',kind:'road dead-ends at water'})}
+  for(const r of o.ramps){const w=AS.nearest(o.water,[r[0],r[1]],20);if(w)raw.push({p:w.q,roadP:[r[0],r[1]],d:w.d,w:w.item,turn:0,ramp:true,road:r[2]||'boat ramp',kind:'water-entry access point (ramp)'})}
+  for(const e of o.deadEnds){const w=AS.nearest(o.water,[e[0],e[1]],20);if(w)raw.push({p:w.q,roadP:[e[0],e[1]],d:w.d,w:w.item,turn:0,dead:true,road:e[2]||'',kind:'water-entry access point (road end)'})}
   for(const c of raw){let s=0;const why=[];
-    s+=30*Math.max(0,1-c.d/far);why.push(Math.round(c.d*3.281)+' ft from water');if(c.open)why.push('nothing built between the road and the water');
+    why.push('road access approx '+Math.round(c.d*3.281)+' ft from mapped water edge');
     if(c.turn>=20){s+=Math.min(20,c.turn/45*20);why.push('curve ('+Math.round(c.turn)+'°)')}
     if(c.dead){s+=20;why.push('road ends at the water')}
     if(c.ramp){s+=18;why.push('boat ramp: easy to drive in by mistake')}
     if(c.onRoute){s+=10;why.push('on the likely route')}
-    if(c.d<4&&!c.ramp){why.push('road crosses water (bridge or causeway)');s-=5}
-    const rail=o.rails?AS.nearest(o.rails,c.p,20):null;if(rail){s-=20;why.push('guardrail mapped nearby')}
+    if(c.d<4&&!c.ramp){why.push('road reaches mapped water edge')}
+    const rail=o.rails?AS.nearest(o.rails,c.roadP||c.p,20):null;if(rail){s-=20;why.push('guardrail mapped nearby')}
     const wi=c.w||{hide:50,why:[],name:''};s+=wi.hide*.25;
     c.score=Math.max(0,Math.min(100,Math.round(s)));c.why=why;c.water=wi}
   raw.sort((a,b)=>b.score-a.score);
@@ -229,36 +230,55 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
   if(frames.length<2)return{boost:0,text:'📷 Photo check: not enough different photos to compare.'};
   const mc=document.createElement('canvas');mc.width=mc.height=S;const g=mc.getContext('2d');g.fillStyle=g.strokeStyle='#fff';
   const px=p=>[S/2+(p[0]-c.p[0])/mpc,S/2-(p[1]-c.p[1])/mpc],R=S*mpc;
-  for(const r of ctx.rings){if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)continue;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});
-    if(r.line){g.lineWidth=Math.max(6,12/mpc);g.stroke()}else{g.closePath();g.fill()}}
-  const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N);let nw=0;for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
-  if(nw<800)return{boost:0,text:'📷 Photo check: too little mapped water in view to compare.'};
+  const drawRing=(r,erase)=>{if(r.line)return;/* OpenStreetMap river/stream centerlines do not describe the actual wetted width. Never turn a thickened line into evidence of water. Only closed mapped-water polygons may qualify. */if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)return;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=g.strokeStyle='#fff';g.closePath();g.fill()};
+  for(const r of ctx.rings)if(!r.hole)drawRing(r,false);
+  for(const r of ctx.rings)if(r.hole)drawRing(r,true);
+  g.globalCompositeOperation='source-over';
+  const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N),WI=new Uint8Array(N);let nw=0;
+  for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
+  if(nw<800)return{boost:0,text:'📷 Photo check: too little closed mapped-water polygon in view; no underwater anomaly scored.'};
+  // Conservative interior mask: require a pixel to be at least 24 pixels inside a CLOSED mapped-water polygon.
+  // This creates a buffer against shoreline/map misalignment. Open river/stream centerlines are excluded above
+  // because their arbitrary stroke width must never manufacture underwater evidence on nearby land.
+  const erode=24;
+  // Integral-image square erosion: same conservative shoreline buffer, without
+  // hundreds of neighbor checks per pixel (which could freeze the browser).
+  const stride=S+1,integral=new Uint32Array(stride*stride);
+  for(let y=1;y<=S;y++){let row=0;for(let x=1;x<=S;x++){row+=W[(y-1)*S+x-1];integral[y*stride+x]=integral[(y-1)*stride+x]+row}}
+  const side=erode*2+1,required=side*side;
+  for(let y=erode;y<S-erode;y++)for(let x=erode;x<S-erode;x++){
+    const x0=x-erode,y0=y-erode,x1=x+erode+1,y1=y+erode+1;
+    const sum=integral[y1*stride+x1]-integral[y0*stride+x1]-integral[y1*stride+x0]+integral[y0*stride+x0];
+    if(sum===required)WI[y*S+x]=1
+  }
+  let ni=0;for(let p=0;p<N;p++)ni+=WI[p];
+  if(ni<250)return{boost:0,text:'📷 Photo check: no reliable interior of a mapped-water polygon in view; no underwater anomaly scored.'};
   const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0)s.push(G[p])}
     s.sort((a,b)=>a-b);const med=s.length?s[s.length>>1]:100;for(let p=0;p<N;p++)G[p]-=med;return{G,d:f.d,to:f.to}});
   const str=(f,b,ox=0,oy=0)=>{let t=0,n=0;for(let y=b.y0+oy;y<=b.y1+oy;y++)for(let x=b.x0+ox;x<=b.x1+ox;x++){if(x<0||y<0||x>=S||y>=S)continue;t+=Math.abs(f.G[y*S+x]);n++}return n?t/n:0};
   const shifted=(f,b,tg)=>{for(const ox of[-20,0,20])for(const oy of[-20,0,20])if((ox||oy)&&str(f,b,ox,oy)>=tg*.6)return true;return false};
   let best=null;
   for(let i=1;i<F.length;i++){const A=F[i-1],B=F[i],on=new Uint8Array(N),seen=new Uint8Array(N);
-    for(let y=8;y<S-8;y++)for(let x=8;x<S-8;x++){const p=y*S+x;if(W[p]&&Math.abs(B.G[p]-A.G[p])>22)on[p]=1}
+    for(let y=8;y<S-8;y++)for(let x=8;x<S-8;x++){const p=y*S+x;if(WI[p]&&Math.abs(B.G[p]-A.G[p])>22)on[p]=1}
     for(let s=0;s<N;s++){if(!on[s]||seen[s])continue;const q=[s];seen[s]=1;let n=0,x0=S,x1=0,y0=S,y1=0;
       while(q.length){const p=q.pop(),x=p%S,y=(p/S)|0;n++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;for(const o of[1,-1,S,-S]){const k=p+o;if(k>=0&&k<N&&on[k]&&!seen[k]){seen[k]=1;q.push(k)}}}
       const Lm=Math.max(x1-x0+1,y1-y0+1)*mpc,Wm=Math.min(x1-x0+1,y1-y0+1)*mpc,fill=n/((x1-x0+1)*(y1-y0+1));
       if(Lm<2.5||Lm>8.5||Wm<1||Wm>3.6||fill<.35)continue;
       const b={x0,x1,y0,y1},cx=(x0+x1)>>1,cy=(y0+y1)>>1;
-      if([[cx,y0-25],[cx,y1+25],[x0-25,cy],[x1+25,cy]].filter(([a,bb])=>a>=0&&bb>=0&&a<S&&bb<S&&W[bb*S+a]).length<2)continue;
+      if([[cx,y0-25],[cx,y1+25],[x0-25,cy],[x1+25,cy]].filter(([a,bb])=>a>=0&&bb>=0&&a<S&&bb<S&&WI[bb*S+a]).length<2)continue;
       const sa=str(A,b),sb=str(B,b),type=sb>sa?'appeared':'disappeared';if(type==='appeared'?shifted(A,b,sb):shifted(B,b,sa))continue;
       let keep=0;if(type==='appeared'){for(let j=i+1;j<F.length;j++)if(str(F[j],b)>Math.max(16,sa+10))keep++;else break}else{for(let j=i-2;j>=0;j--)if(str(F[j],b)>Math.max(16,sb+10))keep++;else break}
       const after=since&&String(B.d)>=since;let sc=25+keep*15+Math.abs(sb-sa)/2+(after&&type==='appeared'?20:0);
       if(!best||sc>best.sc)best={sc,type,keep,a:A.to,b:B.d,Lft:Math.round(Lm*3.281),Wft:Math.round(Wm*3.281)}}}
-  if(!best)return{boost:0,text:'📷 Photo check ('+frames.length+' photos): no car-sized change seen in the water.'};
+  if(!best)return{boost:0,text:'📷 Photo check ('+frames.length+' photos): no qualifying car-sized image change inside the mapped-water interior.'};
   const boost=best.keep>=1?Math.min(15,Math.round(best.sc/6)):0;
-  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized object '+best.type+' between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' +'+boost+' points.':' Seen in only one photo, so no points added.')}}
+  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized image change '+best.type+' within mapped-water interior between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' +'+boost+' points.':' Seen in only one photo, so no points added.')}}
 async function anomalyAll(cands,P){const btn=$('anom');if(btn)btn.disabled=true;const ctx=window.__AS2ctx,since=$('date').value||'',n=Math.min(15,cands.length);
   for(let i=0;i<n;i++){const c=cands[i];if(c.anom)continue;
     try{const fr=await esriFrames(c,(k,t,f)=>status('Photo check: spot '+(i+1)+' of '+n+' · photo date '+k+' of '+t+' · '+f+' different photos'));c.anom=anomalyScore(c,fr,ctx,since);c.score=Math.min(100,c.score+c.anom.boost)}
     catch(e){c.anom={boost:0,text:'📷 Photo check could not run for this spot.'}}}
   cands.sort((a,b)=>b.score-a.score);render(cands,P);const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
-  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) showed a lasting car-sized change and moved up. Note: photo dates are when Esri published them.')}
+  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) showed a lasting car-sized image change within mapped-water interior and moved up. Note: photo dates are when Esri published them.')}
 /* ================= MAP ================= */
 const map=L.map('map').setView([39.5,-84.4],8);
 const base={
@@ -308,8 +328,8 @@ async function run(){
       if(t.leisure==='slipway'){const c=e.type==='node'?P.f(e.lat,e.lon):e.geometry?P.f(e.geometry[0].lat,e.geometry[0].lon):e.center?P.f(e.center.lat,e.center.lon):null;if(c)ramps.push([c[0],c[1],t.name||'boat ramp']);continue}
       if(t.highway&&e.geometry){const g=xy(e.geometry);roadsOSM.push({pts:g,name:t.name||t.ref||t.highway,ids:e.nodes||[]});(e.nodes||[]).forEach((n,i,a)=>{if(i===0||i===a.length-1)nodeUse.set(n,(nodeUse.get(n)||0)+1);else nodeUse.set(n,(nodeUse.get(n)||0)+2)});continue}
       const isLine=!!t.waterway&&t.waterway!=='riverbank';
-      const rings=[];if(e.type==='way'&&e.geometry)rings.push(xy(e.geometry));if(e.type==='relation')for(const m of e.members||[])if(m.geometry&&m.role!=='inner')rings.push(xy(m.geometry));
-      for(const r of rings){const closed=!isLine&&r.length>3&&AS.dist(r[0],r[r.length-1])<1;{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of r){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1]}wRings.push({pts:r,line:!closed,x0,x1,y0,y1})}const info=AS.waterInfo(t,closed?AS.area(r):0,isLine||!closed);nWater++;
+      const rings=[];if(e.type==='way'&&e.geometry)rings.push({pts:xy(e.geometry),hole:false});if(e.type==='relation')for(const m of e.members||[])if(m.geometry)rings.push({pts:xy(m.geometry),hole:m.role==='inner'});
+      for(const item of rings){const r=item.pts,closed=!isLine&&r.length>3&&AS.dist(r[0],r[r.length-1])<1;{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of r){if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1]}wRings.push({pts:r,line:!closed,hole:item.hole,x0,x1,y0,y1})}if(item.hole)continue;const info=AS.waterInfo(t,closed?AS.area(r):0,isLine||!closed);nWater++;
         for(let i=1;i<r.length;i++)water.add(r[i-1],r[i],info);
         if(closed)L.polygon(r.map(p=>P.b(p[0],p[1])),{color:'#1f7fb8',weight:1,fillOpacity:.15}).addTo(layer)}}
     if(!nWater){status('No mapped water found near this area. Try a wider search.');return}

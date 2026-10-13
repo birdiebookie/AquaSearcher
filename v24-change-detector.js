@@ -91,7 +91,8 @@ async function run(){
       const s=sig(c);if(last&&same(s,last.s)){last.to=rs[i].date;continue}
       const F=await frame(rs[i],cx,cy,c,OM);F.s=s;F.date=rs[i].date;F.to=rs[i].date;frames.push(F);last=F;
     }
-    const ev=[],{SW,NW}=OM?{SW:OM,NW:dilate(OM)}:stableWater(frames);
+    if(!OM)throw Error('No closed mapped-water polygon found at this location. AquaSearcher will not score image changes without verified water geometry.');
+    const ev=[],{SW,NW}={SW:OM,NW:dilate(OM)};
     let wp=0;for(let q=0;q<SW.length;q++)wp+=SW[q];
     for(let i=1;i<frames.length;i++){const A=frames[i-1],B=frames[i];if(A.water<200||B.water<200)continue;
       for(const b of blobs(A,B,m,SW,NW)){
