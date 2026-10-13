@@ -1,0 +1,37 @@
+name: AquaSearcher water-guard checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [fix/water-interior-anomaly-mask]
+    paths:
+      - 'index.html'
+      - 'v22-highres-anomaly-scan.js'
+      - 'v24-change-detector.js'
+      - 'v25-water-eligibility.js'
+      - '.github/workflows/aquasearcher-water-guard.yml'
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check water guard and detector syntax
+        run: |
+          node --check v22-highres-anomaly-scan.js
+          node --check v24-change-detector.js
+          node --check v25-water-eligibility.js
+      - name: Verify final guard is loaded after detector layers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert '<script src="v24-change-detector.js?v=24.1"></script>' in s
+          assert '<script src="v25-water-eligibility.js?v=25.1"></script>' in s
+          assert s.index('v25-water-eligibility.js?v=25.1') > s.index('v24-change-detector.js?v=24.1')
+          print('V25 fail-closed guard is loaded last.')
+          PY
