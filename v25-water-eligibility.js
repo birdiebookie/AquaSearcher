@@ -96,7 +96,7 @@ function install(){
   }
   if(typeof oldHist==='function'&&!oldHist.__v25){
     const wrapped=async function(f,...args){
-      const result=await oldHist.apply(this,args);
+      const result=await oldHist.apply(this,[f,...args]);
       try{await guardHistorical(f)}catch(e){
         if(f?.hist){f.hist.best=0;f.hist.heroScore=0;f.hist.changeEstablished=false;f.hist.waterEligibility='Water verification failed; anomaly excluded.'}
         if(f){f.historicalChange=0;f.changeScore=0;f.anomaly=0}
