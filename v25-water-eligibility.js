@@ -39,7 +39,16 @@ async function guardHistorical(f){
   if(h.heroTransition&&Number.isFinite(+h.heroTransition.lat)&&Number.isFinite(+(h.heroTransition.lng))){
     if(!await isMappedWater(h.heroTransition.lat,h.heroTransition.lng))h.heroTransition=null;
   }
-  if(!Array.isArray(h.comparisons)||!h.comparisons.length)return f;
+  if(!Array.isArray(h.comparisons)||!h.comparisons.length){
+    // An aggregate change score without a verified, water-located coordinate
+    // cannot be used as underwater anomaly evidence.
+    if(!h.heroTransition){
+      h.best=0;h.heroScore=0;h.changeConfidence=0;h.changeEstablished=false;
+      h.waterEligibility='No coordinate-level anomaly verified inside mapped water; anomaly evidence excluded.';
+      f.historicalChange=0;f.changeScore=0;f.anomaly=0;
+    }
+    return f;
+  }
   const verified=[];
   for(const c of h.comparisons){
     const lat=Number(c.lat),lng=Number(c.lng??c.lon);
