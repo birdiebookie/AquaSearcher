@@ -25,6 +25,22 @@ jobs:
           node --check v22-highres-anomaly-scan.js
           node --check v24-change-detector.js
           node --check v25-water-eligibility.js
+      - name: Syntax-check inline application scripts
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          for source in ('index.html', 'as2.html'):
+              html=Path(source).read_text(encoding='utf-8')
+              scripts=re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, re.S)
+              for i, body in enumerate(scripts):
+                  if not body.strip():
+                      continue
+                  Path(f'/tmp/{source.replace(".", "-")}-{i}.js').write_text(body, encoding='utf-8')
+          PY
+          for file in /tmp/index-html-*.js /tmp/as2-html-*.js; do
+            [ -f "$file" ] && node --check "$file"
+          done
       - name: Verify final guard is loaded after detector layers
         run: |
           python - <<'PY'
