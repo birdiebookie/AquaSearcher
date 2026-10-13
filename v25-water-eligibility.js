@@ -89,6 +89,10 @@ function install(){
   const oldVehicle=window.vehicleScan,oldHist=window.histScan;
   if(typeof oldVehicle==='function'&&!oldVehicle.__v25){
     const wrapped=async function(f,...args){
+      // Remove unverified historical target coordinates BEFORE the detector scans them.
+      try{await guardHistorical(f)}catch(e){
+        if(f?.hist){f.hist.comparisons=[];f.hist.heroTransition=null;f.hist.best=0;f.hist.heroScore=0;f.hist.changeEstablished=false}
+      }
       await oldVehicle.apply(this,[f,...args]);
       try{await guardVehicle(f)}catch(e){
         if(f?.veh){f.veh.hits=[];f.veh.best=null;f.objectScore=0}
