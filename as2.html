@@ -241,9 +241,16 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
   // This creates a buffer against shoreline/map misalignment. Open river/stream centerlines are excluded above
   // because their arbitrary stroke width must never manufacture underwater evidence on nearby land.
   const erode=24;
-  for(let y=erode;y<S-erode;y++)for(let x=erode;x<S-erode;x++){let ok=true;
-    for(let dy=-erode;dy<=erode&&ok;dy+=2)for(let dx=-erode;dx<=erode;dx+=2){if(dx*dx+dy*dy>erode*erode)continue;if(!W[(y+dy)*S+x+dx]){ok=false;break}}
-    if(ok)WI[y*S+x]=1}
+  // Integral-image square erosion: same conservative shoreline buffer, without
+  // hundreds of neighbor checks per pixel (which could freeze the browser).
+  const stride=S+1,integral=new Uint32Array(stride*stride);
+  for(let y=1;y<=S;y++){let row=0;for(let x=1;x<=S;x++){row+=W[(y-1)*S+x-1];integral[y*stride+x]=integral[(y-1)*stride+x]+row}}
+  const side=erode*2+1,required=side*side;
+  for(let y=erode;y<S-erode;y++)for(let x=erode;x<S-erode;x++){
+    const x0=x-erode,y0=y-erode,x1=x+erode+1,y1=y+erode+1;
+    const sum=integral[y1*stride+x1]-integral[y0*stride+x1]-integral[y1*stride+x0]+integral[y0*stride+x0];
+    if(sum===required)WI[y*S+x]=1
+  }
   let ni=0;for(let p=0;p<N;p++)ni+=WI[p];
   if(ni<250)return{boost:0,text:'📷 Photo check: no reliable interior of a mapped-water polygon in view; no underwater anomaly scored.'};
   const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0)s.push(G[p])}
