@@ -32,7 +32,7 @@ jobs:
           from pathlib import Path
           for source in ('index.html', 'as2.html'):
               html=Path(source).read_text(encoding='utf-8')
-              scripts=re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, re.S)
+              scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, re.S)
               for i, body in enumerate(scripts):
                   if not body.strip():
                       continue
