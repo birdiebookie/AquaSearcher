@@ -35,7 +35,11 @@ async function isMappedWater(lat,lng){
 }
 async function guardHistorical(f){
   const h=f&&f.hist;
-  if(!h||!Array.isArray(h.comparisons)||!h.comparisons.length)return f;
+  if(!h)return f;
+  if(h.heroTransition&&Number.isFinite(+h.heroTransition.lat)&&Number.isFinite(+(h.heroTransition.lng))){
+    if(!await isMappedWater(h.heroTransition.lat,h.heroTransition.lng))h.heroTransition=null;
+  }
+  if(!Array.isArray(h.comparisons)||!h.comparisons.length)return f;
   const verified=[];
   for(const c of h.comparisons){
     const lat=Number(c.lat),lng=Number(c.lng??c.lon);
