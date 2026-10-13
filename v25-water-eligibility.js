@@ -30,7 +30,8 @@ async function isMappedWater(lat,lng){
     }catch(e){}
   }
   const verified=answered&&result;
-  cache.set(key,verified);
+  // Cache authoritative yes/no answers only. A network outage must be retryable.
+  if(answered)cache.set(key,result);
   return verified;
 }
 async function guardHistorical(f){
