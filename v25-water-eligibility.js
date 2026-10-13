@@ -93,8 +93,10 @@ async function guardVehicle(f){
   return f;
 }
 function refresh(){if(typeof window.render==='function')window.render();if(typeof window.redraw==='function')window.redraw()}
+let installChecks=0;
 function install(){
-  if(window.__aquaV25Installed)return;
+  // Some legacy layers install/wrap themselves several seconds after page load.
+  // Re-assert this final guard during startup so a late V18/V22 wrapper cannot bypass it.
   const oldVehicle=window.vehicleScan,oldHist=window.histScan;
   if(typeof oldVehicle==='function'&&!oldVehicle.__v25){
     const wrapped=async function(f,...args){
@@ -126,9 +128,11 @@ function install(){
   window.aquaIsMappedWater=isMappedWater;
   window.aquaWaterEligibilityVersion='V25 fail-closed mapped-water gate';
   const logo=document.querySelector('.logo small');if(logo)logo.textContent='V25';
-  if(typeof window.vehicleScan==='function'&&window.vehicleScan.__v25&&
-     typeof window.histScan==='function'&&window.histScan.__v25){window.__aquaV25Installed=true;return}
-  setTimeout(install,600);
+  const guarded=typeof window.vehicleScan==='function'&&window.vehicleScan.__v25&&
+    typeof window.histScan==='function'&&window.histScan.__v25;
+  window.__aquaV25Installed=!!guarded;
+  installChecks++;
+  if(installChecks<24)setTimeout(install,500);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
