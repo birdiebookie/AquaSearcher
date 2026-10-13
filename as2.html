@@ -119,26 +119,27 @@ AS.waterInfo=function(t,area,isLine){t=t||{};let s=60,why=[];const name=t.name||
 /* main scoring of candidate points along roads */
 AS.findCandidates=function(o){
   // o: {roads:[{pts:[[x,y]..],onRoute,name}], water:{grid}, rails:grid, ramps:[[x,y,name]], deadEnds:[[x,y,name]], maxD}
-  const maxD=o.maxD||60,far=o.far||120,raw=[];
+  // Only retain genuine near-water access candidates. Place the marker at the mapped water edge/feature,
+  // not on the nearby road; ordinary roads tens or hundreds of feet away are not entry points.
+  const maxD=20,far=20,raw=[];
   for(const road of o.roads){const s=AS.resample(road.pts,10);let run=null;
-    for(let i=0;i<s.length;i++){let w=AS.nearest(o.water,s[i],far);
-      if(w&&w.d>maxD){if(!o.buildings||AS.blocked(o.buildings,s[i],w.q))w=null;else w.open=true}
-      else if(w&&w.d>15&&o.buildings&&AS.blocked(o.buildings,s[i],w.q))w=null;
+    for(let i=0;i<s.length;i++){const w=AS.nearest(o.water,s[i],maxD);
+      if(w&&o.buildings&&AS.blocked(o.buildings,s[i],w.q))w=null;
       if(w){const turn=Math.max(AS.turn(s,i,3),AS.turn(s,i,6)*.8);
-        const cand={p:s[i],d:w.d,w:w.item,turn,open:!!w.open,onRoute:road.onRoute,road:road.name,kind:w.d<4?'crosses water':w.open?'open ground to water':'road near water'};
+        const cand={p:w.q,roadP:s[i],d:w.d,w:w.item,turn,open:false,onRoute:road.onRoute,road:road.name,kind:'water-entry access point'};
         if(!run)run=cand;else{const mt=Math.max(run.turn,turn);if(cand.d<run.d){run=cand}run.turn=mt}}
       else if(run){raw.push(run);run=null}}
     if(run)raw.push(run)}
-  for(const r of o.ramps){const w=AS.nearest(o.water,[r[0],r[1]],80);raw.push({p:[r[0],r[1]],d:w?w.d:30,w:w?w.item:null,turn:0,ramp:true,road:r[2]||'boat ramp',kind:'boat ramp'})}
-  for(const e of o.deadEnds){const w=AS.nearest(o.water,[e[0],e[1]],maxD);if(w)raw.push({p:[e[0],e[1]],d:w.d,w:w.item,turn:0,dead:true,road:e[2]||'',kind:'road dead-ends at water'})}
+  for(const r of o.ramps){const w=AS.nearest(o.water,[r[0],r[1]],20);if(w)raw.push({p:w.q,roadP:[r[0],r[1]],d:w.d,w:w.item,turn:0,ramp:true,road:r[2]||'boat ramp',kind:'water-entry access point (ramp)'})}
+  for(const e of o.deadEnds){const w=AS.nearest(o.water,[e[0],e[1]],20);if(w)raw.push({p:w.q,roadP:[e[0],e[1]],d:w.d,w:w.item,turn:0,dead:true,road:e[2]||'',kind:'water-entry access point (road end)'})}
   for(const c of raw){let s=0;const why=[];
-    s+=30*Math.max(0,1-c.d/far);why.push(Math.round(c.d*3.281)+' ft from water');if(c.open)why.push('nothing built between the road and the water');
+    why.push('road access approx '+Math.round(c.d*3.281)+' ft from mapped water edge');
     if(c.turn>=20){s+=Math.min(20,c.turn/45*20);why.push('curve ('+Math.round(c.turn)+'°)')}
     if(c.dead){s+=20;why.push('road ends at the water')}
     if(c.ramp){s+=18;why.push('boat ramp: easy to drive in by mistake')}
     if(c.onRoute){s+=10;why.push('on the likely route')}
-    if(c.d<4&&!c.ramp){why.push('road crosses water (bridge or causeway)');s-=5}
-    const rail=o.rails?AS.nearest(o.rails,c.p,20):null;if(rail){s-=20;why.push('guardrail mapped nearby')}
+    if(c.d<4&&!c.ramp){why.push('road reaches mapped water edge')}
+    const rail=o.rails?AS.nearest(o.rails,c.roadP||c.p,20):null;if(rail){s-=20;why.push('guardrail mapped nearby')}
     const wi=c.w||{hide:50,why:[],name:''};s+=wi.hide*.25;
     c.score=Math.max(0,Math.min(100,Math.round(s)));c.why=why;c.water=wi}
   raw.sort((a,b)=>b.score-a.score);
