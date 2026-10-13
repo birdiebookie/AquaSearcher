@@ -229,21 +229,22 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
   if(frames.length<2)return{boost:0,text:'📷 Photo check: not enough different photos to compare.'};
   const mc=document.createElement('canvas');mc.width=mc.height=S;const g=mc.getContext('2d');g.fillStyle=g.strokeStyle='#fff';
   const px=p=>[S/2+(p[0]-c.p[0])/mpc,S/2-(p[1]-c.p[1])/mpc],R=S*mpc;
-  const drawRing=(r,erase)=>{if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)return;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=g.strokeStyle='#fff';if(r.line){g.lineWidth=Math.max(6,12/mpc);g.stroke()}else{g.closePath();g.fill()}};
+  const drawRing=(r,erase)=>{if(r.line)return;/* OpenStreetMap river/stream centerlines do not describe the actual wetted width. Never turn a thickened line into evidence of water. Only closed mapped-water polygons may qualify. */if(r.x1<c.p[0]-R||r.x0>c.p[0]+R||r.y1<c.p[1]-R||r.y0>c.p[1]+R)return;g.beginPath();r.pts.forEach((p,i)=>{const q=px(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=g.strokeStyle='#fff';g.closePath();g.fill()};
   for(const r of ctx.rings)if(!r.hole)drawRing(r,false);
   for(const r of ctx.rings)if(r.hole)drawRing(r,true);
   g.globalCompositeOperation='source-over';
   const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N),WI=new Uint8Array(N);let nw=0;
   for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
-  if(nw<800)return{boost:0,text:'📷 Photo check: too little mapped water in view to compare.'};
-  // Conservative interior mask: require a pixel to be at least 10 pixels inside mapped water.
-  // This rejects shoreline edges, road-side objects, and uncertain water-boundary pixels.
-  const erode=10;
+  if(nw<800)return{boost:0,text:'📷 Photo check: too little closed mapped-water polygon in view; no underwater anomaly scored.'};
+  // Conservative interior mask: require a pixel to be at least 24 pixels inside a CLOSED mapped-water polygon.
+  // This creates a buffer against shoreline/map misalignment. Open river/stream centerlines are excluded above
+  // because their arbitrary stroke width must never manufacture underwater evidence on nearby land.
+  const erode=24;
   for(let y=erode;y<S-erode;y++)for(let x=erode;x<S-erode;x++){let ok=true;
     for(let dy=-erode;dy<=erode&&ok;dy+=2)for(let dx=-erode;dx<=erode;dx+=2){if(dx*dx+dy*dy>erode*erode)continue;if(!W[(y+dy)*S+x+dx]){ok=false;break}}
     if(ok)WI[y*S+x]=1}
   let ni=0;for(let p=0;p<N;p++)ni+=WI[p];
-  if(ni<100)return{boost:0,text:'📷 Photo check: no reliable interior-water area in view; no underwater anomaly scored.'};
+  if(ni<250)return{boost:0,text:'📷 Photo check: no reliable interior of a mapped-water polygon in view; no underwater anomaly scored.'};
   const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0)s.push(G[p])}
     s.sort((a,b)=>a-b);const med=s.length?s[s.length>>1]:100;for(let p=0;p<N;p++)G[p]-=med;return{G,d:f.d,to:f.to}});
   const str=(f,b,ox=0,oy=0)=>{let t=0,n=0;for(let y=b.y0+oy;y<=b.y1+oy;y++)for(let x=b.x0+ox;x<=b.x1+ox;x++){if(x<0||y<0||x>=S||y>=S)continue;t+=Math.abs(f.G[y*S+x]);n++}return n?t/n:0};
