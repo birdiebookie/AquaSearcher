@@ -48,7 +48,7 @@ button{font-size:1.05rem;padding:12px 14px;border-radius:8px;border:0;cursor:poi
 </style>
 </head>
 <body>
-<header><h1>AquaSearcher AS2 <small style="font-size:.55em;opacity:.8">v2.5</small></h1><span>Where could the car have gone into the water?</span></header>
+<header><h1>AquaSearcher AS2 <small style="font-size:.55em;opacity:.8">v2.6</small></h1><span>Where could the car have gone into the water?</span></header>
 <main>
 <aside id="form">
   <label for="seen">Last seen (address or lat, lng)</label>
@@ -234,8 +234,11 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
     if(r.line){g.lineWidth=Math.max(6,12/mpc);g.stroke()}else{g.closePath();g.fill()}}
   const md=g.getImageData(0,0,S,S).data,W=new Uint8Array(N);let nw=0;for(let p=0;p<N;p++)if(md[p*4+3]>128){W[p]=1;nw++}
   if(nw<800)return{boost:0,text:'📷 Photo check: too little mapped water in view to compare.'};
-  const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0)s.push(G[p])}
-    s.sort((a,b)=>a-b);const med=s.length?s[s.length>>1]:100;for(let p=0;p<N;p++)G[p]-=med;return{G,d:f.d,to:f.to}});
+  const wl=(d,i)=>{const r=d[i],g=d[i+1],b=d[i+2];return (r+g+b)/3<115&&b>=r-15&&g-b<=35};
+  const F=frames.map(f=>{const d=f.el.getContext('2d').getImageData(0,0,S,S).data,G=new Float32Array(N),s=[];let wn=0,wt=0;for(let p=0,i=0;p<N;p++,i+=4){G[p]=(d[i]+d[i+1]+d[i+2])/3;if(W[p]&&p%7===0){s.push(G[p]);wt++;if(wl(d,i))wn++}}
+    s.sort((a,b)=>a-b);const med=s.length?s[s.length>>1]:100;for(let p=0;p<N;p++)G[p]-=med;return{G,D:d,wf:wt?wn/wt:0,d:f.d,to:f.to}});
+  if(F.filter(f=>f.wf>=.35).length<Math.ceil(F.length/2))return{boost:0,skip:true,text:'📷 Photo check: the mapped water here does not look like water in the photos (the map outline may be off), so this spot was skipped.'};
+  const ringW=(f,b)=>{let t=0,n=0;for(let y=b.y0-12;y<=b.y1+12;y+=2)for(let x=b.x0-12;x<=b.x1+12;x+=2){if(x<0||y<0||x>=S||y>=S||(x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1))continue;n++;if(wl(f.D,(y*S+x)*4))t++}return n?t/n:0};
   const str=(f,b,ox=0,oy=0)=>{let t=0,n=0;for(let y=b.y0+oy;y<=b.y1+oy;y++)for(let x=b.x0+ox;x<=b.x1+ox;x++){if(x<0||y<0||x>=S||y>=S)continue;t+=Math.abs(f.G[y*S+x]);n++}return n?t/n:0};
   const shifted=(f,b,tg)=>{for(const ox of[-20,0,20])for(const oy of[-20,0,20])if((ox||oy)&&str(f,b,ox,oy)>=tg*.6)return true;return false};
   let best=null;
@@ -247,7 +250,7 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
       if(Lm<2.5||Lm>8.5||Wm<1||Wm>3.6||fill<.35)continue;
       const b={x0,x1,y0,y1},cx=(x0+x1)>>1,cy=(y0+y1)>>1;
       if([[cx,y0-25],[cx,y1+25],[x0-25,cy],[x1+25,cy]].filter(([a,bb])=>a>=0&&bb>=0&&a<S&&bb<S&&W[bb*S+a]).length<2)continue;
-      const sa=str(A,b),sb=str(B,b),type=sb>sa?'appeared':'disappeared';if(type==='appeared'?shifted(A,b,sb):shifted(B,b,sa))continue;if(since&&(type!=='appeared'||String(B.d)<since))continue;
+      const sa=str(A,b),sb=str(B,b),type=sb>sa?'appeared':'disappeared';if(type==='appeared'?shifted(A,b,sb):shifted(B,b,sa))continue;if(ringW(A,b)<.5||ringW(B,b)<.5)continue;if(since&&(type!=='appeared'||String(B.d)<since))continue;
       let keep=0;if(type==='appeared'){for(let j=i+1;j<F.length;j++)if(str(F[j],b)>Math.max(16,sa+10))keep++;else break}else{for(let j=i-2;j>=0;j--)if(str(F[j],b)>Math.max(16,sb+10))keep++;else break}
       const after=since&&String(B.d)>=since;let sc=25+keep*15+Math.abs(sb-sa)/2+(after&&type==='appeared'?20:0);
       if(!best||sc>best.sc)best={sc,type,keep,a:A.to,b:B.d,Lft:Math.round(Lm*3.281),Wft:Math.round(Wm*3.281)}}}
@@ -258,8 +261,8 @@ async function anomalyAll(cands,P){const btn=$('anom');if(btn)btn.disabled=true;
   for(let i=0;i<n;i++){const c=cands[i];if(c.anom)continue;
     try{const fr=await esriFrames(c,(k,t,f)=>status('Photo check: spot '+(i+1)+' of '+n+' · photo date '+k+' of '+t+' · '+f+' different photos'));c.anom=anomalyScore(c,fr,ctx,since)}
     catch(e){c.anom={boost:0,text:'📷 Photo check could not run for this spot.'}}}
-  render(cands,P);const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
-  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) flagged as possible other vehicles (listed at the top). The ranking did not change. '+(since?'Only changes in photos published after the date missing were counted. ':'')+'Note: photo dates are when Esri published them.')}
+  render(cands,P);const skipped=cands.slice(0,n).filter(c=>c.anom&&c.anom.skip).length;const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
+  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) flagged as possible other vehicles (listed at the top). The ranking did not change. '+(skipped?skipped+' spot(s) skipped because the mapped water did not look like water in the photos. ':'')+''+(since?'Only changes in photos published after the date missing were counted. ':'')+'Note: photo dates are when Esri published them.')}
 /* ================= MAP ================= */
 const map=L.map('map').setView([39.5,-84.4],8);
 const base={
