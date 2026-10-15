@@ -48,7 +48,7 @@ button{font-size:1.05rem;padding:12px 14px;border-radius:8px;border:0;cursor:poi
 </style>
 </head>
 <body>
-<header><h1>AquaSearcher AS2 <small style="font-size:.55em;opacity:.8">v2.4</small></h1><span>Where could the car have gone into the water?</span></header>
+<header><h1>AquaSearcher AS2 <small style="font-size:.55em;opacity:.8">v2.5</small></h1><span>Where could the car have gone into the water?</span></header>
 <main>
 <aside id="form">
   <label for="seen">Last seen (address or lat, lng)</label>
@@ -253,13 +253,13 @@ function anomalyScore(c,frames,ctx,since){const S=360,mpc=(156543.03392*Math.cos
       if(!best||sc>best.sc)best={sc,type,keep,a:A.to,b:B.d,Lft:Math.round(Lm*3.281),Wft:Math.round(Wm*3.281)}}}
   if(!best)return{boost:0,text:'📷 Photo check ('+frames.length+' photos): no car-sized change seen in the water'+(since?' after the date missing':'')+'.'};
   const boost=best.keep>=1?Math.min(15,Math.round(best.sc/6)):0;
-  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized object '+best.type+' between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' +'+boost+' points.':' Seen in only one photo, so no points added.')}}
+  return{boost,text:(boost?'⚠ ':'')+'📷 Photo check: car-sized object '+best.type+' between '+best.a+' and '+best.b+' (about '+best.Lft+' × '+best.Wft+' ft), '+(best.type==='appeared'?'stayed for '+best.keep+' later':'was there in '+best.keep+' earlier')+' photo(s).'+(boost?' Flagged: possible other vehicle. Does not change the ranking.':' Seen in only one photo, so not flagged.')}}
 async function anomalyAll(cands,P){const btn=$('anom');if(btn)btn.disabled=true;const ctx=window.__AS2ctx,since=$('date').value||'',n=Math.min(15,cands.length);
   for(let i=0;i<n;i++){const c=cands[i];if(c.anom)continue;
-    try{const fr=await esriFrames(c,(k,t,f)=>status('Photo check: spot '+(i+1)+' of '+n+' · photo date '+k+' of '+t+' · '+f+' different photos'));c.anom=anomalyScore(c,fr,ctx,since);c.score=Math.min(100,c.score+c.anom.boost)}
+    try{const fr=await esriFrames(c,(k,t,f)=>status('Photo check: spot '+(i+1)+' of '+n+' · photo date '+k+' of '+t+' · '+f+' different photos'));c.anom=anomalyScore(c,fr,ctx,since)}
     catch(e){c.anom={boost:0,text:'📷 Photo check could not run for this spot.'}}}
-  cands.sort((a,b)=>b.score-a.score);render(cands,P);const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
-  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) showed a lasting car-sized change and moved up. '+(since?'Only changes in photos published after the date missing were counted. ':'')+'Note: photo dates are when Esri published them.')}
+  render(cands,P);const flagged=cands.filter(c=>c.anom&&c.anom.boost).length;
+  status('Photo check done for the top '+n+' spots. '+flagged+' spot(s) flagged as possible other vehicles (listed at the top). The ranking did not change. '+(since?'Only changes in photos published after the date missing were counted. ':'')+'Note: photo dates are when Esri published them.')}
 /* ================= MAP ================= */
 const map=L.map('map').setView([39.5,-84.4],8);
 const base={
@@ -336,6 +336,8 @@ function render(cands,P){markers.forEach(m=>layer.removeLayer(m));markers=[];if(
   if(tq){const t=P.f(+tq[1],+tq[2]);let bi=-1,bd=Infinity;cands.forEach((c,i)=>{const d=AS.dist(c.p,t);if(d<bd){bd=d;bi=i}});
     window.__truthM=L.marker([+tq[1],+tq[2]]).bindTooltip('Known car location').addTo(layer);
     h+='<div class="truth"><b>Test result:</b> '+(bi<0?'no candidates':bd<=150?'the known car spot matches <b>#'+(bi+1)+'</b> of '+cands.length+' ('+Math.round(bd*3.281)+' ft away).'+(bi<10?' ✅ Top 10!':''):'closest candidate is <b>#'+(bi+1)+'</b> of '+cands.length+', but it is '+Math.round(bd*3.281)+' ft from the known spot — a miss.')+'</div>'}
+  const pv=cands.map((c,i)=>[c,i]).filter(([c,i])=>i<100&&c.anom&&c.anom.boost);
+  if(pv.length)h+='<div class="truth" style="border-color:#b3261e"><b>⚠ Possible other vehicles</b> <span class="hint">(photo changes that could be a different car; they do not change the ranking)</span><ul>'+pv.map(([c,i])=>'<li><a href="#" data-go="'+i+'">#'+(i+1)+' '+c.kind+(c.road?' · '+c.road:'')+'</a> · '+c.lat.toFixed(6)+', '+c.lng.toFixed(6)+'</li>').join('')+'</ul></div>';
   if(!cands.length)h+='<p>No places where a road comes within about 200 ft of mapped water.</p>';
   const shown=cands.slice(0,100);if(cands.length>100)h+='<p class="hint">Showing the top 100 of '+cands.length+' spots. The CSV has all of them.</p>';
   shown.forEach((c,i)=>{const wname=c.water.name?c.water.name+' · ':'';
@@ -345,8 +347,8 @@ function render(cands,P){markers.forEach(m=>layer.removeLayer(m));markers=[];if(
     (c.anom?'<div class="hint" style="color:'+(c.anom.boost?'#b3261e;font-weight:700':'inherit')+'">'+c.anom.text+'</div>':'')+'<div class="hint">'+c.lat.toFixed(6)+', '+c.lng.toFixed(6)+'</div>'+links(c)+'<br><button class="small" data-hist="'+i+'">📷 Photo history</button></div>';
     const m=L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:'<div class="pin" style="background:'+hex(c.score)+'">'+(i+1)+'</div>',iconSize:[30,30],iconAnchor:[15,15]})}).addTo(layer);
     m.on('click',()=>focus(i));markers.push(m)});
-  box.innerHTML=h;$('anom').onclick=()=>anomalyAll(cands,P);shown.forEach((c,i)=>$('c'+i).onclick=e=>{if(e.target.dataset.hist!=null){e.stopPropagation();photoHistory(c,i);return}if(e.target.tagName!=='A')focus(i)});
-  $('csv').onclick=()=>{const rows=[['rank','score','type','road','lat','lng','feet_from_water','water','can_hide','reasons']].concat(cands.map((c,i)=>[i+1,c.score,c.kind,c.road,c.lat.toFixed(6),c.lng.toFixed(6),Math.round(c.d*3.281),c.water.name||c.water.type,c.water.hide,c.why.join('; ')]));
+  box.innerHTML=h;$('anom').onclick=()=>anomalyAll(cands,P);box.querySelectorAll('[data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();const k=+a.dataset.go;focus(k);const el=$('c'+k);if(el)el.scrollIntoView({behavior:'smooth',block:'center'})});shown.forEach((c,i)=>$('c'+i).onclick=e=>{if(e.target.dataset.hist!=null){e.stopPropagation();photoHistory(c,i);return}if(e.target.tagName!=='A')focus(i)});
+  $('csv').onclick=()=>{const rows=[['rank','score','type','road','lat','lng','feet_from_water','water','can_hide','reasons','photo_check']].concat(cands.map((c,i)=>[i+1,c.score,c.kind,c.road,c.lat.toFixed(6),c.lng.toFixed(6),Math.round(c.d*3.281),c.water.name||c.water.type,c.water.hide,c.why.join('; '),c.anom?c.anom.text:'']));
     const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='AS1-entry-points.csv';a.click()};
   window.__AS1=cands}
 function focus(i){const c=window.__AS1[i];map.setView([c.lat,c.lng],18);document.querySelectorAll('.cand').forEach(e=>e.classList.remove('on'));const el=$('c'+i);el.classList.add('on');el.scrollIntoView({block:'nearest'})}
