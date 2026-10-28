@@ -162,6 +162,63 @@ function normalizeAccessList(list){
   return x;
  }).filter(x=>x&&Number.isFinite(x.lat)&&Number.isFinite(x.lng));
 }
+async function verifyMappedWaterBoundary(f){
+ // A nearby water feature is not enough: the candidate coordinate itself must
+ // intersect a mapped waterbody polygon or waterway flowline.
+ const bases=[
+  'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/60/query',
+  'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/50/query'
+ ];
+ for(let i=0;i<bases.length;i++){
+  try{
+   const p=new URLSearchParams({
+    where:'1=1',
+    geometry:String(f.lng)+','+String(f.lat),
+    geometryType:'esriGeometryPoint',
+    inSR:'4326',
+    spatialRel:'esriSpatialRelIntersects',
+    distance:i===0?'1':'5',
+    units:'esriSRUnit_Meter',
+    returnCountOnly:'true',
+    f:'json'
+   });
+   const res=await fetch(bases[i]+'?'+p.toString(),{signal:AbortSignal.timeout(10000),cache:'no-store'});
+   if(!res.ok)continue;
+   const j=await res.json();
+   if(Number(j.count)>0)return {status:'VERIFIED_WATER',source:i===0?'USGS 3DHP waterbody':'USGS 3DHP flowline'};
+  }catch(e){console.warn('Water-boundary check unavailable',e)}
+ }
+ return {status:'NOT_VERIFIED',source:'USGS 3DHP point-intersection check'};
+}
+async function enforceWaterBoundaries(){
+ const arr=window.__aquaFindings;
+ if(!Array.isArray(arr)||!arr.length)return;
+ const candidates=arr.filter(f=>f&&!f.isPinTest&&!f.accessPoint);
+ if(!candidates.length)return;
+ if($('status'))$('status').textContent='Checking each candidate coordinate against mapped water boundaries…';
+ let verified=0,removed=0,unverified=0;
+ // Small batches avoid flooding the public hydrography service.
+ for(let i=0;i<candidates.length;i+=4){
+  const batch=candidates.slice(i,i+4);
+  await Promise.all(batch.map(async f=>{
+   const result=await verifyMappedWaterBoundary(f);
+   f.waterBoundaryStatus=result.status;
+   f.waterBoundarySource=result.source;
+   if(result.status==='VERIFIED_WATER')verified++;
+   else {removed++;unverified++}
+  }));
+ }
+ // Keep the exact-pin test and access-point layer separate. Unverified points
+ // are not shown as underwater targets; a missing map match is not proof of land,
+ // so the status explains that they could not be verified rather than calling
+ // them definitively dry land.
+ const kept=arr.filter(f=>f&&(f.isPinTest||f.accessPoint||f.waterBoundaryStatus==='VERIFIED_WATER'));
+ arr.splice(0,arr.length,...kept);
+ if(typeof window.render==='function')window.render();
+ applyMapColors();
+ setTimeout(()=>{decorateAll();renderAccessPhase1(window.aquaV16Access||[]);applyMapColors()},80);
+ if($('status'))$('status').textContent='Water-boundary check complete — '+verified+' candidates verified on mapped water; '+unverified+' unverified candidates withheld from target rankings. Unverified does not necessarily mean dry land; it means the map data could not confirm water at that exact point.';
+}
 function phase1Process(){
  const arr=window.__aquaFindings;
  if(!Array.isArray(arr)||!arr.length)return false;
@@ -224,7 +281,7 @@ function install(){
  start.__phase1Installed=true;
  start.onclick=async function(ev){
   try{await old.call(this,ev)}catch(e){console.error('Phase 1 caught search error',e)}
-  await sleep(250);await recoverOldFailure();phase1Process();
+  await sleep(250);await recoverOldFailure();phase1Process();await enforceWaterBoundaries();phase1Process();
  };
  const logo=document.querySelector('.logo small');if(logo)logo.textContent='PHASE 1';
  const header=document.querySelector('header');
