@@ -165,8 +165,32 @@ function normalizeAccessList(list){
  }).filter(x=>x&&Number.isFinite(x.lat)&&Number.isFinite(x.lng));
 }
 async function verifyMappedWaterBoundary(f){
- // A nearby water feature is not enough: the candidate coordinate itself must
- // intersect a mapped waterbody polygon or waterway flowline.
+ // First verify against the exact mapped feature geometry used to create this
+ // candidate. This includes OSM ponds that are absent from the USGS 3DHP layer.
+ const g=f.waterBoundaryGeometry||{};
+ const rings=(g.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
+ if(rings.length&&!f.waterBoundaryIsFlowline){
+  let inside=false;
+  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+   const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+   if((yi>f.lat)!==(yj>f.lat)&&f.lng<(xj-xi)*(f.lat-yi)/(yj-yi)+xi)inside=!inside;
+  }
+  if(inside)return {status:'VERIFIED_WATER',source:'source waterbody polygon (USGS/OSM)'};
+ }
+ const paths=(g.paths||[]).filter(p=>Array.isArray(p)&&p.length>1);
+ if(f.waterBoundaryIsFlowline&&paths.length){
+  const latScale=111320,lngScale=111320*Math.cos(f.lat*Math.PI/180);
+  let nearest=Infinity;
+  for(const path of paths)for(let i=1;i<path.length;i++){
+   const a=path[i-1],b=path[i],px=(f.lng-a[0])*lngScale,py=(f.lat-a[1])*latScale;
+   const dx=(b[0]-a[0])*lngScale,dy=(b[1]-a[1])*latScale;
+   const t=Math.max(0,Math.min(1,(px*dx+py*dy)/(dx*dx+dy*dy||1)));
+   nearest=Math.min(nearest,Math.hypot(px-t*dx,py-t*dy));
+  }
+  if(nearest<=5)return {status:'VERIFIED_WATER',source:'source mapped waterway flowline'};
+ }
+ // If the source geometry cannot confirm the exact point, ask the authoritative
+ // national hydrography service. No match remains fail-closed.
  const bases=[
   'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/60/query',
   'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/50/query'
