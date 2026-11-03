@@ -146,7 +146,42 @@ async function getWater(p,r){
   const out=[],seen=new Set();for(const f of all){const c=center(f);if(!c)continue;const a=f.attributes||{},k=[a.OBJECTID||'',a.GNIS_NAME||'',c.lat.toFixed(5),c.lng.toFixed(5)].join('|');if(!seen.has(k)){seen.add(k);out.push(f)}}const dedup=[];for(const f of out){const c=center(f);if(!c)continue;const tooClose=dedup.find(g=>{const q=center(g);const sameId=String(f.attributes?.OBJECTID||'')===String(g.attributes?.OBJECTID||'')&&!!f.attributes?.OBJECTID;const fn=String(f.attributes?.GNIS_NAME||f._osmTags?.name||'').trim().toLowerCase(),gn=String(g.attributes?.GNIS_NAME||g._osmTags?.name||'').trim().toLowerCase();return sameId||(q&&fn&&gn&&fn===gn&&miles(c.lat,c.lng,q.lat,q.lng)<0.035)});if(!tooClose)dedup.push(f);else{const fw=waterWidthFt(f),gw=waterWidthFt(tooClose);if((fw??0)>(gw??0))dedup[dedup.indexOf(tooClose)]=f}}return dedup
 }
 function center(f){const g=f.geometry||{},pts=[];if(Array.isArray(g))g.forEach(p=>{if(p&&p.x!=null&&p.y!=null)pts.push({x:+p.x,y:+p.y})});else for(const group of [g.rings,g.paths])if(Array.isArray(group))for(const line of group)for(const p of line||[])if(Array.isArray(p)&&p.length>=2)pts.push({x:+p[0],y:+p[1]});return pts.length?{lat:pts.reduce((s,p)=>s+p.y,0)/pts.length,lng:pts.reduce((s,p)=>s+p.x,0)/pts.length}:null}
-function featurePoint(f,target){const g=f.geometry||{},pts=[];if(Array.isArray(g))g.forEach(p=>{if(p&&p.x!=null&&p.y!=null)pts.push({lat:+p.y,lng:+p.x})});else for(const group of [g.rings,g.paths])if(Array.isArray(group))for(const line of group)for(const p of line||[])if(Array.isArray(p)&&p.length>=2)pts.push({lat:+p[1],lng:+p[0]});if(!pts.length)return center(f);if(!target)return pts[0];if(f._flowline||Array.isArray(g.paths)){let best=pts[0],bd=miles(target.lat,target.lng,best.lat,best.lng);for(const q of pts.slice(1)){const d=miles(target.lat,target.lng,q.lat,q.lng);if(d<bd){bd=d;best=q}}return best}const rings=(g.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);function inside(lat,lng){let hit=false;for(const ring of rings){for(let i=0,j=ring.length-1;i<ring.length;j=i++){const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0],cross=((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi);if(cross)hit=!hit}}return hit}if(inside(target.lat,target.lng))return target;let best=pts[0],bd=miles(target.lat,target.lng,best.lat,best.lng);for(const q of pts.slice(1)){const d=miles(target.lat,target.lng,q.lat,q.lng);if(d<bd){bd=d;best=q}}const c=center(f);if(c){for(let t=.04;t<=.96;t+=.04){const q={lat:best.lat+(c.lat-best.lat)*t,lng:best.lng+(c.lng-best.lng)*t};if(inside(q.lat,q.lng))return q}if(inside(c.lat,c.lng))return c;return null}return null}
+function featurePoint(f,target){
+ const g=f.geometry||{},pts=[];
+ if(Array.isArray(g))g.forEach(p=>{if(p&&p.x!=null&&p.y!=null)pts.push({lat:+p.y,lng:+p.x})});
+ else for(const group of [g.rings,g.paths])if(Array.isArray(group))for(const line of group)for(const p of line||[])if(Array.isArray(p)&&p.length>=2)pts.push({lat:+p[1],lng:+p[0]});
+ if(!pts.length)return center(f);
+ if(f._flowline||Array.isArray(g.paths)){
+  let best=pts[0],bd=miles(target?.lat??best.lat,target?.lng??best.lng,best.lat,best.lng);
+  for(const q of pts.slice(1)){const d=miles(target?.lat??q.lat,target?.lng??q.lng,q.lat,q.lng);if(d<bd){bd=d;best=q}}
+  return best;
+ }
+ const rings=(g.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
+ function inside(lat,lng){
+  let hit=false;
+  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+   const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+   if((yi>lat)!==(yj>lat)&&lng<(xj-xi)*(lat-yi)/(yj-yi)+xi)hit=!hit;
+  }
+  return hit;
+ }
+ if(target&&inside(target.lat,target.lng))return target;
+ const c=center(f);
+ if(c&&inside(c.lat,c.lng))return c;
+ const minLat=Math.min(...pts.map(p=>p.lat)),maxLat=Math.max(...pts.map(p=>p.lat));
+ const minLng=Math.min(...pts.map(p=>p.lng)),maxLng=Math.max(...pts.map(p=>p.lng));
+ // Search a deterministic interior grid. This handles concave/irregular pond
+ // polygons where the vertex-average center and nearest-edge interpolation
+ // both fall outside the actual water.
+ let best=null,bd=Infinity;
+ for(let y=1;y<=24;y++)for(let x=1;x<=24;x++){
+  const q={lat:minLat+(maxLat-minLat)*y/25,lng:minLng+(maxLng-minLng)*x/25};
+  if(!inside(q.lat,q.lng))continue;
+  const d=target?miles(target.lat,target.lng,q.lat,q.lng):miles(c?.lat??q.lat,c?.lng??q.lng,q.lat,q.lng);
+  if(d<bd){bd=d;best=q}
+ }
+ return best;
+}
 function miles(a,b,c,d){const R=3958.7613,x=(b-d)*Math.PI/180,y=(a-c)*Math.PI/180,q=Math.sin(y/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(x/2)**2;return R*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
 function accPoint(e){
   const a=e.attributes||{},t=e.tags||{};
@@ -207,7 +242,33 @@ function microSamples(c){const ft=.3048/111320,lonFt=ft/Math.max(.15,Math.cos(c.
 function ringSamples(w,c){const pts=[c],rings=w.geometry?.rings||[];for(const ring of rings){const step=Math.max(1,Math.floor(ring.length/10));for(let i=0;i<ring.length&&pts.length<15;i+=step){const p=ring[i];if(Array.isArray(p))pts.push({lat:+p[1],lng:+p[0]})}}return pts.slice(0,15)}
 function makePin(c){return{id:'pin-'+Date.now(),lat:c.lat,lng:c.lng,name:'Exact search-pin test area',ftype:'known-coordinate test',access:20,accessType:'supplied coordinate',accessDistance:0,anomaly:0,priority:20,pinDistance:0,nearPin:true,exact:true,isPinTest:true,samples:microSamples(c),label:'TEST',why:'Exact supplied location only. This is a test area, not proof of a vehicle or object; priority rises only when historical/object evidence supports it.'}}
 function waterEdgeDistanceFt(c,w){const rings=w.geometry?.rings||[];let best=Infinity;for(const ring of rings)for(const p of ring||[]){if(Array.isArray(p)&&p.length>=2)best=Math.min(best,miles(c.lat,c.lng,+p[1],+p[0])*5280)}return Number.isFinite(best)?Math.round(best):null}
-function waterWidthFt(w){const rings=w.geometry?.rings||[];let pts=[];for(const ring of rings)for(const p of ring)if(Array.isArray(p)&&p.length>=2)pts.push({lat:+p[1],lng:+p[0]});if(pts.length<3)return null;let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;for(const p of pts){minLat=Math.min(minLat,p.lat);maxLat=Math.max(maxLat,p.lat);minLng=Math.min(minLng,p.lng);maxLng=Math.max(maxLng,p.lng)}const latFt=(maxLat-minLat)*364000,mid=(minLat+maxLat)/2,lonFt=(maxLng-minLng)*364000*Math.cos(mid*Math.PI/180);return Math.min(latFt,lonFt)}
+function waterWidthFt(w){
+ const rings=w.geometry?.rings||[];
+ const ring=rings.find(r=>Array.isArray(r)&&r.length>=3);
+ if(!ring)return null;
+ const lat0=ring.reduce((a,p)=>a+(+p[1]),0)/ring.length;
+ const sx=364000*Math.cos(lat0*Math.PI/180),sy=364000;
+ const pts=ring.filter(p=>Array.isArray(p)&&p.length>=2).map(p=>[+p[0]*sx,+p[1]*sy]);
+ if(pts.length<3)return null;
+ // Convex hull + minimum rotated width avoids rejecting diagonal ponds just
+ // because their north/south or east/west bounding box is narrow.
+ pts.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+ const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+ const lo=[],hi=[];
+ for(const p of pts){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p)}
+ for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(hi.length>=2&&cross(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p)}
+ const hull=lo.slice(0,-1).concat(hi.slice(0,-1));
+ if(hull.length<3)return null;
+ let minWidth=Infinity;
+ for(let i=0;i<hull.length;i++){
+  const a=hull[i],b=hull[(i+1)%hull.length],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
+  if(!len)continue;
+  let min=Infinity,max=-Infinity;
+  for(const p of hull){const v=(-dy*p[0]+dx*p[1])/len;min=Math.min(min,v);max=Math.max(max,v)}
+  minWidth=Math.min(minWidth,max-min);
+ }
+ return Number.isFinite(minWidth)?minWidth:null;
+}
 function makeFinding(w,i,a){const tags=w._osmTags||w.tags||{},nm=String(w.attributes?.GNIS_NAME||tags.name||'').trim().toLowerCase();if(tags.amenity==='fountain'||tags.amenity==='drinking_water'||tags.amenity==='water_point'||tags.amenity==='watering_place'||tags.leisure==='swimming_pool'||/fountain|swimming pool|splash pad|drinking water|water point|watering place/.test(nm))return null;const target=pin?pin.getLatLng():null,c=featurePoint(w,target);if(!c)return null;const widthFt=waterWidthFt(w);if(widthFt!==null&&widthFt<25)return null;const n=nearest(c,a),as=n.best?Math.max(0,Math.min(100,Math.round(100-n.distance*120+n.best.boost))):5;
 const accessType=String(n.best?.type||'none').toLowerCase();
 const meaningfulAccess=!!n.best&&(as>=30||['official','road-end','road-shore-approach','mapped'].includes(accessType));
@@ -339,7 +400,7 @@ window.addEventListener('unhandledrejection',function(e){
 <script src="v16-access-crawler.js"></script>
 <script src="v16-investigator-links.js"></script>
 <script src="v16-login.js"></script>
-<script src="phase1-foundation.js?v=phase1-20261103-2"></script>
+<script src="phase1-foundation.js?v=phase1-20261103-3"></script>
 <script src="phase2-intelligence.js"></script>
 <script src="phase3-precision.js"></script>
 <script src="v17-priority-access.js"></script>
