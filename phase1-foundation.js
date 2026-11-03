@@ -281,7 +281,15 @@ function install(){
  start.__phase1Installed=true;
  start.onclick=async function(ev){
   try{await old.call(this,ev)}catch(e){console.error('Phase 1 caught search error',e)}
-  await sleep(250);await recoverOldFailure();phase1Process();await enforceWaterBoundaries();phase1Process();
+  await sleep(250);
+  // Never run the post-processing layer after the main crawl failed or stopped.
+  // The previous wrapper overwrote the real error with “Phase 1 complete”,
+  // leaving the UI falsely parked at 40% and hiding the failed dependency.
+  if(state!=='complete')return;
+  const completedStatus=String($('status')?.textContent||'Search complete.');
+  try{phase1Process();await enforceWaterBoundaries();phase1Process();}
+  catch(e){console.error('Phase 1 finalization failed',e)}
+  if($('status'))$('status').textContent=completedStatus;
  };
  const logo=document.querySelector('.logo small');if(logo)logo.textContent='PHASE 1';
  const header=document.querySelector('header');
