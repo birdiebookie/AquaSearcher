@@ -46,13 +46,15 @@ function usableWater(f){
  const type=String(f.ftype||'').toLowerCase(),name=String(f.name||'').toLowerCase();
  if(/fountain|swimming pool|ornamental pond|decorative pond|splash pad|drinking water|water point|watering place/.test(name))return false;
  if(/drainageway|ditch|drain/.test(name+' '+type)&&(f.access||0)<85)return false;
- if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<30)return false;
+ // Keep every real mapped pond at least 25 ft across. Width is now measured
+ // perpendicular to the polygon's orientation, so diagonal ponds are not
+ // accidentally discarded by an axis-aligned bounding box.
+ if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<25)return false;
  const rawName=String(f._osmTags?.name||f.name||'').trim();
  const realName=!!rawName&&!/^(unnamed|unknown|river)$/i.test(rawName);
  const minor=/^stream$|^canal$|^ditch$|^drain$/.test(type)||f._flowline||/^river$/.test(String(f._osmTags?.waterway||'').toLowerCase());
  const namedMajor=/lake|reservoir|harsha/.test(name)||(/^river$/.test(type)&&realName)||(/river/.test(String(f._osmTags?.waterway||'').toLowerCase())&&realName);
  const area=Number(f.waterAreaSqKm||f.areaSqKm||0);
- if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<50&&!namedMajor&&(f.access||0)<80)return false;
  if(minor && !namedMajor && area<.03 && (f.access||0)<80)return false;
  if(area>0&&area<.005&&(f.access||0)<85)return false;
  return true;
