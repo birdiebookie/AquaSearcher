@@ -63,7 +63,7 @@ function dedupeWater(arr){
  const kept=[];
  for(const f of arr){
   const dup=kept.find(k=>{
-    const sameSource=!!(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId));
+    const sameSource=!!(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId)&&distFt(f,k)<=25);
     const sameNamedFeature=!!(f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase()&&distFt(f,k)<=25);
     return sameSource||sameNamedFeature;
    });
