@@ -62,9 +62,11 @@ function usableWater(f){
 function dedupeWater(arr){
  const kept=[];
  for(const f of arr){
-  const sameSource=!!(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId));
-   const sameNamedFeature=!!(f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase()&&distFt(f,k)<=25);
-   const dup=kept.find(k=>sameSource||sameNamedFeature);
+  const dup=kept.find(k=>{
+    const sameSource=!!(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId));
+    const sameNamedFeature=!!(f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase()&&distFt(f,k)<=25);
+    return sameSource||sameNamedFeature;
+   });
   if(!dup){kept.push(f);continue}
   const winner=(f.priority||0)>(dup.priority||0)?f:dup,loser=winner===f?dup:f;
   winner.groupedCount=(winner.groupedCount||1)+(loser.groupedCount||1);
