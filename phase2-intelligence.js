@@ -9,6 +9,8 @@ const P2={
   hydroBase:'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer',
   bathyBase:'https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/USGS_Inland_Bathymetry_Survey_Invent_v3Update/FeatureServer/0',
   ohioBathyBase:'https://gis2.ohiodnr.gov/ArcGIS/rest/services/DOW_Services/DOW_Lakes_Bathymetry/MapServer/0',
+  noaaHydroBase:'https://gis.ngdc.noaa.gov/arcgis/rest/services/web_mercator/nos_hydro_dynamic/MapServer',
+  noaaMultibeamBase:'https://gis.ngdc.noaa.gov/arcgis/rest/services/multibeam_mosaics/multibeam_mosaic_combined/ImageServer',
   elevBase:'https://epqs.nationalmap.gov/v1/json',
   cache:new Map(),
   running:false
@@ -146,6 +148,66 @@ async function queryBathymetry(p,r){
     return[];
   }
 }
+
+async function queryNOAASurveyCoverage(p,r){
+  const key=cacheKey('noaa-nos-coverage',p,r);
+  if(P2.cache.has(key))return P2.cache.get(key);
+  const meters=Math.round(r*1609.344);
+  const queryLayer=layer=>arcQuery(P2.noaaHydroBase+'/'+layer,{
+    where:'1=1',
+    geometry:p.lng+','+p.lat,
+    geometryType:'esriGeometryPoint',
+    inSR:'4326',
+    spatialRel:'esriSpatialRelIntersects',
+    distance:meters,
+    units:'esriSRUnit_Meter',
+    returnCountOnly:'true',
+    f:'json'
+  });
+  const [bags,digital]=await Promise.allSettled([queryLayer(0),queryLayer(1)]);
+  const out={
+    bagsCount:bags.status==='fulfilled'?Number(bags.value.count)||0:null,
+    digitalCount:digital.status==='fulfilled'?Number(digital.value.count)||0:null,
+    source:'NOAA NCEI NOS hydrographic survey footprints'
+  };
+  P2.cache.set(key,out);
+  return out;
+}
+async function queryNOAAMultibeamDepth(p){
+  const key=cacheKey('noaa-multibeam-depth',p,0);
+  if(P2.cache.has(key))return P2.cache.get(key);
+  try{
+    const params=new URLSearchParams({
+      geometry:p.lng+','+p.lat,
+      geometryType:'esriGeometryPoint',
+      sr:'4326',
+      returnGeometry:'false',
+      returnPixelValues:'true',
+      renderingRule:JSON.stringify({rasterFunction:'None'}),
+      f:'json'
+    });
+    const response=await fetch(P2.noaaMultibeamBase+'/identify?'+params.toString(),{
+      signal:AbortSignal.timeout(10000),
+      cache:'no-store'
+    });
+    if(!response.ok)throw Error('NOAA multibeam ImageServer HTTP '+response.status);
+    const json=await response.json();
+    if(json.error)throw Error(json.error.message||'NOAA multibeam identify failed');
+    const values=[json.value,json.properties?.Values?.[0],json.properties?.Band_1,json.properties?.band_1,json.properties?.value,...Object.values(json.properties||{})];
+    const raw=values.find(v=>v!==null&&v!==undefined&&String(v).trim()!==''&&Number.isFinite(Number(v)));
+    const elevationMeters=raw===undefined?null:Number(raw);
+    const out=elevationMeters!==null&&elevationMeters<0
+      ? {available:true,elevationMeters,depthFt:Math.round(-elevationMeters*3.28084*10)/10,source:'NOAA NCEI multibeam mosaic',gridResolutionDeg:0.0008333333,note:'Regional grid sample only; approximately 90 m cells, not a site-specific depth sounding.'}
+      : {available:false,elevationMeters,source:'NOAA NCEI multibeam mosaic',note:'No usable negative bathymetry pixel was returned at this point.'};
+    P2.cache.set(key,out);
+    return out;
+  }catch(e){
+    const out={available:false,source:'NOAA NCEI multibeam mosaic',note:e.message||'NOAA multibeam sample unavailable'};
+    P2.cache.set(key,out);
+    return out;
+  }
+}
+
 function featurePoint(f){
   const g=f.geometry||{},p=g;
   if(p.x!=null&&p.y!=null)return{lat:+p.y,lng:+p.x};
@@ -321,7 +383,7 @@ function ensureBar(){
   if(!host)return;
   const b=document.createElement('div');b.id='phase2bar';
   b.style.cssText='margin:7px 0 9px;padding:8px;background:#eef7fb;border:1px solid #c6dbe6;border-radius:8px;font-size:10px';
-  b.innerHTML='<b>PHASE 2 INTELLIGENCE</b><div id="phase2status" style="margin-top:4px;color:#60717f">Waiting for Phase 1.</div><div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap"><button id="p2run" class="btn2" style="width:auto">Run Phase 2</button><button id="p2csv" class="btn2" style="width:auto">CSV</button><button id="p2kml" class="btn2" style="width:auto">KML</button></div>';
+  b.innerHTML='<b>PHASE 2 INTELLIGENCE</b><div id="phase2status" style="margin-top:4px;color:#60717f">Waiting for Phase 1.</div><div id="noaaStatus" style="margin-top:5px;color:#526b7a">NOAA depth and survey sources will be checked when Phase 2 runs.</div><div style="font-size:10px;margin-top:5px"><a href="https://www.ncei.noaa.gov/maps/bathymetry/" target="_blank" rel="noopener">NOAA Bathymetric Data Viewer (includes BlueTopo)</a> · <a href="https://nauticalcharts.noaa.gov/data/bluetopo.html" target="_blank" rel="noopener">BlueTopo data details</a></div><div style="font-size:9px;color:#718391;margin-top:4px">NOAA coverage is supporting context only; it does not change vehicle-likelihood scores. BlueTopo coverage is limited to navigationally significant waters.</div><div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap"><button id="p2run" class="btn2" style="width:auto">Run Phase 2</button><button id="p2csv" class="btn2" style="width:auto">CSV</button><button id="p2kml" class="btn2" style="width:auto">KML</button></div>';
   host.parentElement.insertBefore(b,host.nextSibling);
   $('p2run').onclick=()=>runPhase2(true);
   $('p2csv').onclick=downloadCSV;
@@ -336,7 +398,12 @@ function exportRows(){
     accessDistanceMi:f.phase2?.accessDistanceMi??f.accessDistance??'',historicalScore:f.phase2?.historicalScore??f.hist?.best??0,
     persistence:f.phase2?.historicalPersistence??f.hist?.persistenceCount??0,objectScore:f.phase2?.objectScore??f.objectScore??0,
     bathymetryAvailable:f.phase2?.bathymetryAvailable?'YES':'NO',bathymetryRecords:f.phase2?.bathymetryRecords??0,
-    depthMin:f.phase2?.depthMin??'',depthMax:f.phase2?.depthMax??'',depthEvidence:f.phase2?.depthEvidence||'',vehicleHidingScore:f.phase2?.vehicleHidingScore??'',vehicleHidingReasons:(f.phase2?.vehicleHidingReasons||[]).join('; '),topographyReliefFt:f.phase2?.topographyReliefFt??''
+    depthMin:f.phase2?.depthMin??'',depthMax:f.phase2?.depthMax??'',depthEvidence:f.phase2?.depthEvidence||'',
+    noaaMultibeamDepthFt:f.phase2?.noaaMultibeam?.available?f.phase2.noaaMultibeam.depthFt:'',
+    noaaMultibeamNote:f.phase2?.noaaMultibeam?.note||'',
+    noaaBagsSurveyCount:window.__aquaPhase2NOAACoverage?.bagsCount??'',
+    noaaDigitalSurveyCount:window.__aquaPhase2NOAACoverage?.digitalCount??'',
+    vehicleHidingScore:f.phase2?.vehicleHidingScore??'',vehicleHidingReasons:(f.phase2?.vehicleHidingReasons||[]).join('; '),topographyReliefFt:f.phase2?.topographyReliefFt??''
   }));
 }
 function download(name,type,data){
@@ -360,8 +427,10 @@ function renderPhase2Evidence(){
     let d=card.querySelector('.phase2-evidence');if(d)d.remove();
     d=document.createElement('div');d.className='phase2-evidence small';
     d.style.cssText='margin-top:6px;padding-top:5px;border-top:1px solid #d7e2ea';
+    const nb=f.phase2.noaaMultibeam;
+    const noaaDepth=nb?.available?' · NOAA multibeam context ~'+nb.depthFt+' ft (coarse ~90 m grid)':'';
     d.innerHTML='<b>Phase 2:</b> '+f.phase2Reasons.join(' · ')+' · <b>Score '+f.phase2.phase2Score+'/100</b>'+
-      (f.phase2.bathymetryAvailable?' · 🗺 bathymetry coverage found':'')+' · Depth: '+f.phase2.depthEvidence;
+      (f.phase2.bathymetryAvailable?' · 🗺 bathymetry coverage found':'')+' · Depth: '+f.phase2.depthEvidence+noaaDepth;
     card.appendChild(d);
   });
 }
@@ -376,18 +445,36 @@ async function runPhase2(manual){
   P2.running=true;ensureBar();
   if($('phase2status'))$('phase2status').textContent='Loading current USGS 3DHP hydrography and bathymetry inventory…';
   try{
-    const [hydro,usgsBathy,ohioBathy]=await Promise.all([query3DHP(p,r),queryBathymetry(p,r),queryOhioBathymetry(p,r)]);
+    const [hydro,usgsBathy,ohioBathy,noaaCoverage]=await Promise.all([
+      query3DHP(p,r),
+      queryBathymetry(p,r),
+      queryOhioBathymetry(p,r),
+      queryNOAASurveyCoverage(p,r).catch(e=>({bagsCount:null,digitalCount:null,source:'NOAA NCEI NOS hydrographic survey footprints',error:e.message||'unavailable'}))
+    ]);
     const bathy=[...usgsBathy,...ohioBathy];
     const access=window.aquaV16Access||[];
     const candidates=arr.filter(f=>!f.isPinTest&&!f.accessPoint);
     for(const f of candidates)await enrichFinding(f,hydro,bathy,access);
     candidates.sort((a,b)=>(b.phase2Priority||0)-(a.phase2Priority||0));
+    window.__aquaPhase2NOAACoverage=noaaCoverage;
+    // Sample only the eight highest-ranked candidates to keep NOAA requests bounded.
+    // These coarse regional samples are displayed as context and never alter scores.
+    for(let i=0;i<Math.min(8,candidates.length);i+=4){
+      await Promise.all(candidates.slice(i,i+4).map(async f=>{
+        f.phase2.noaaMultibeam=await queryNOAAMultibeamDepth({lat:f.lat,lng:f.lng});
+      }));
+    }
+    if($('noaaStatus')){
+      const bags=noaaCoverage.bagsCount==null?'unavailable':noaaCoverage.bagsCount;
+      const digital=noaaCoverage.digitalCount==null?'unavailable':noaaCoverage.digitalCount;
+      $('noaaStatus').textContent='NOAA NCEI survey coverage in this search area: '+bags+' BAG grids · '+digital+' digital-sounding survey footprints. Top 8 candidates also checked against the multibeam depth grid where data exist.';
+    }
     window.__aquaPhase2Findings=candidates;
     window.__aquaPhase2HydroCount=hydro.length;
     window.__aquaPhase2BathyCount=bathy.length;
     window.__aquaPhase2BathySources={usgs:usgsBathy.length,ohioDNR:ohioBathy.length};
     renderPhase2Evidence();
-    if($('phase2status'))$('phase2status').textContent='Complete — '+candidates.length+' water candidates enriched · '+hydro.length+' 3DHP features · '+bathy.length+' bathymetry records (USGS '+usgsBathy.length+' · Ohio DNR '+ohioBathy.length+'). Phase 1 markers and filtering were preserved.';
+    if($('phase2status'))$('phase2status').textContent='Complete — '+candidates.length+' water candidates enriched · '+hydro.length+' 3DHP features · '+bathy.length+' inland bathymetry records (USGS '+usgsBathy.length+' · Ohio DNR '+ohioBathy.length+'). NOAA coverage and coarse depth context added separately. Phase 1 markers, filters and Phase 2 scores were preserved.';
     if($('status'))$('status').textContent+=' Phase 2 intelligence added.';
     toast('Phase 2 intelligence complete. Phase 1 results were preserved.');
   }catch(e){
