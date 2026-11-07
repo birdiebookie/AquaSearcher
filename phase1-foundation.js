@@ -62,7 +62,11 @@ function usableWater(f){
 function dedupeWater(arr){
  const kept=[];
  for(const f of arr){
-  const dup=kept.find(k=>distFt(f,k)<=175&&((f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase())||(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId))));
+  const dup=kept.find(k=>{
+    const sameSource=!!(f.sourceId&&k.sourceId&&String(f.sourceId)===String(k.sourceId)&&distFt(f,k)<=25);
+    const sameNamedFeature=!!(f.name&&k.name&&f.name.toLowerCase()===k.name.toLowerCase()&&distFt(f,k)<=25);
+    return sameSource||sameNamedFeature;
+   });
   if(!dup){kept.push(f);continue}
   const winner=(f.priority||0)>(dup.priority||0)?f:dup,loser=winner===f?dup:f;
   winner.groupedCount=(winner.groupedCount||1)+(loser.groupedCount||1);
@@ -89,11 +93,11 @@ function dedupeAccess(arr){
 }
 function recalc(f){
  f.waterSuitability=waterSuitability(f);
- const access=Number(f.access)||0,hist=Number(f.hist?.best)||0,vehicle=f.veh?.best?Math.round((Number(f.veh.best.confidence)||0)*100):0;
+ const access=Number(f.access)||0,hist=Number(f.hist?.best)||0,vehicle=Math.max(Number(f.objectScore)||0,f.veh?.best?Math.round((Number(f.veh.best.confidence)||0)*100):0);
  const pin=f.isPinTest?0:(f.nearPin?55:0);
- f.priority=f.isPinTest?20:Math.max(0,Math.min(100,Math.round(access*.38+hist*.38+vehicle*.14+f.waterSuitability*.10+pin*.05)));
+ f.priority=f.isPinTest?20:Math.max(0,Math.min(100,Math.round(vehicle*.50+hist*.25+access*.15+f.waterSuitability*.10)));
  f.label=f.isPinTest?'TEST':f.priority>=80?'HIGH':f.priority>=55?'MEDIUM':'LOW';
- f.scoring={access:38,historical:38,object:14,waterSuitability:10,location:5,note:'Fine-tuned vehicle-fit/anomaly screening score.'};
+ f.scoring={object:50,historical:25,access:15,waterSuitability:10,note:'Car-first score: vehicle/object evidence leads; historical change, access and water suitability support it.'};
  f.scoreReasons=scoreReason(f);
  return f;
 }

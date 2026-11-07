@@ -1,0 +1,56 @@
+name: AquaSearcher water-data refresh validation
+on:
+  pull_request:
+    branches:
+      - car-first-search-fixes
+    paths:
+      - index.html
+      - phase1-foundation.js
+      - phase2-intelligence.js
+      - phase3-precision.js
+      - phase3-target-detection.js
+      - DATA_SOURCES.md
+      - .github/workflows/aqua-refresh-validation.yml
+  push:
+    branches:
+      - car-first-search-fixes
+    paths:
+      - index.html
+      - phase1-foundation.js
+      - phase2-intelligence.js
+      - phase3-precision.js
+      - phase3-target-detection.js
+      - DATA_SOURCES.md
+      - .github/workflows/aqua-refresh-validation.yml
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check application JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("index.html").read_text()
+          blocks = re.findall(r'<script([^>]*)>(.*?)</script>', html, re.I | re.S)
+          count = 0
+          for attrs, body in blocks:
+              low = attrs.lower()
+              if 'src=' in low:
+                  continue
+              if 'type=' in low and 'text/javascript' not in low and 'application/javascript' not in low:
+                  continue
+              Path(f"/tmp/aqua-inline-{count}.js").write_text(body)
+              count += 1
+          print(f"Extracted {count} inline JavaScript blocks")
+          PY
+          for file in /tmp/aqua-inline-*.js; do node --check "$file"; done
+          node --check phase1-foundation.js
+          node --check phase2-intelligence.js
+          node --check phase3-precision.js
+          node --check phase3-target-detection.js

@@ -12,16 +12,25 @@ function addPt(out,lat,lng,score,why){if(!Number.isFinite(+lat)||!Number.isFinit
 function targets(f){
  const out=[];
  addPt(out,f?.lat,f?.lng,100,f?.isPinTest?'exact supplied coordinate':'water-feature center');
- for(const c of (f?.hist?.comparisons||[]).slice().sort((a,b)=>(b.heroScore||0)-(a.heroScore||0))){
-   if((c.heroScore||0)>=45||(c.localized||0)>=45)addPt(out,c.lat,c.lng,c.heroScore||c.score,'historical anomaly');
-   if(out.length>=5)break;
- }
  if(f?.isPinTest){
-   const ft=.3048/111320,lonFt=ft/Math.max(.15,Math.cos(f.lat*Math.PI/180));
-   for(const [n,e] of [[25,0],[-25,0],[0,25],[0,-25],[50,0],[-50,0],[0,50],[0,-50],[75,0],[-75,0],[0,75],[0,-75]])
-     addPt(out,f.lat+n*ft,f.lng+e*lonFt,90,'exact-pin search ring');
+  const ft=.3048/111320,lonFt=ft/Math.max(.15,Math.cos(f.lat*Math.PI/180));
+  for(const [n,e] of [[25,0],[-25,0],[0,25],[0,-25],[50,0],[-50,0],[0,50],[0,-50],[75,0],[-75,0],[0,75],[0,-75]])
+   addPt(out,f.lat+n*ft,f.lng+e*lonFt,90,'exact-pin search ring');
+ }else{
+  // Sample separated parts of the actual waterbody outline. A centroid-only
+  // scan misses shoreline vehicles and cars in the far side of larger ponds.
+  const samples=f?.samples||[];
+  for(const t of [.18,.39,.61,.82]){
+   if(samples.length>1){const p=samples[Math.round((samples.length-1)*t)];if(p)addPt(out,p.lat,p.lng,85,'waterbody perimeter sample')}
+  }
+  // Historical anomaly coordinates remain additional targets, not the only
+  // places scanned on a water feature.
+  for(const c of (f?.hist?.comparisons||[]).slice().sort((a,b)=>(b.heroScore||0)-(a.heroScore||0))){
+   if((c.heroScore||0)>=45||(c.localized||0)>=45)addPt(out,c.lat,c.lng,c.heroScore||c.score,'historical anomaly');
+   if(out.length>=8)break;
+  }
  }
- return out.slice(0,f?.isPinTest?13:5);
+ return out.slice(0,f?.isPinTest?13:8);
 }
 function tileUrl(r,lat,lng,z){
  const n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;
