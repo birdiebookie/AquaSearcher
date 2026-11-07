@@ -133,15 +133,82 @@ async function overpass(q){
   throw Error('All OpenStreetMap data sources failed. '+errors.join(' | '));
 }
 async function getWater(p,r){
-  const base=url=>url+'?where='+encodeURIComponent('FTYPE IN (390,436,460,336)')+'&geometry='+encodeURIComponent(p.lng+','+p.lat)+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance='+(r*1609.34)+'&units=esriSRUnit_Meter&outFields=OBJECTID,GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&outSR=4326&f=json';
-  let all=[];
-  const waterUrls=[base('https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/12/query'),base('https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/9/query')];
-  const waterResults=await Promise.allSettled(waterUrls.map(u=>fetch(u,{signal:AbortSignal.timeout(15000)}).then(x=>x.json())));
-  for(const r of waterResults){if(r.status==='fulfilled'&&!r.value.error)all.push(...(r.value.features||[]));else console.warn('USGS waterbody source failed',r.reason||r.value?.error)}
-  const flowBase=url=>url+'?where='+encodeURIComponent('FType=460')+'&geometry='+encodeURIComponent(p.lng+','+p.lat)+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance='+(r*1609.34)+'&units=esriSRUnit_Meter&outFields=OBJECTID,GNIS_Name,FType&returnGeometry=true&outSR=4326&f=json';
-  const flowUrls=['https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/3','https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/4'].map(flowBase);
-  const flowResults=await Promise.allSettled(flowUrls.map(u=>fetch(u,{signal:AbortSignal.timeout(15000)}).then(x=>x.json())));
-  for(const r of flowResults){if(r.status==='fulfilled'&&!r.value.error)for(const f of r.value.features||[])for(const path of f.geometry?.paths||[])if(path?.length)all.push({attributes:{OBJECTID:'usgs-flow-'+(f.attributes?.OBJECTID||''),GNIS_NAME:f.attributes?.GNIS_Name||'Unnamed stream/river',FTYPE:460,AREASQKM:0},geometry:{rings:[path]},_flowline:true});else console.warn('USGS stream/river source failed',r.reason||r.value?.error)}
+  // Primary national hydrography source: USGS 3DHP. NHD is retired; 3DHP
+  // now combines elevation-derived hydrography with legacy NHD where EDH
+  // has not yet been collected. Keep the old NHDPlus queries only as a
+  // service-outage fallback, never as the preferred source.
+  const all=[];
+  const hydroQuery=async(layer,where,fields)=>{
+    const params=new URLSearchParams({
+      where,
+      geometry:p.lng+','+p.lat,
+      geometryType:'esriGeometryPoint',
+      inSR:'4326',
+      spatialRel:'esriSpatialRelIntersects',
+      distance:String(Math.round(r*1609.344)),
+      units:'esriSRUnit_Meter',
+      outFields:fields,
+      returnGeometry:'true',
+      outSR:'4326',
+      resultRecordCount:'2500',
+      f:'json'
+    });
+    const endpoint='https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/'+layer+'/query?'+params.toString();
+    const response=await fetch(endpoint,{signal:AbortSignal.timeout(18000),cache:'no-store'});
+    if(!response.ok)throw Error('USGS 3DHP layer '+layer+' HTTP '+response.status);
+    const json=await response.json();
+    if(json.error)throw Error(json.error.message||'USGS 3DHP layer '+layer+' query failed');
+    return json;
+  };
+  const [waterResult,flowResult]=await Promise.allSettled([
+    hydroQuery(60,'1=1','OBJECTID,id3dhp,gnisidlabel,featuretype,featuretypelabel,areasqkm,featuredate,workunitid'),
+    hydroQuery(50,'featuretype IN (1,2)','OBJECTID,id3dhp,gnisidlabel,featuretype,featuretypelabel,lengthkm,waterbodyid3dhp,featuredate,workunitid')
+  ]);
+  const waterOK=waterResult.status==='fulfilled'&&!waterResult.value.error;
+  const flowOK=flowResult.status==='fulfilled'&&!flowResult.value.error;
+  function normalize3DHP(feature,layer){
+    const a=feature.attributes||{};
+    const label=String(a.featuretypelabel||'').trim();
+    const type=label.toLowerCase();
+    const isFlowline=layer===50;
+    const waterType=/lake|ocean/.test(type)?'lake':(/river/.test(type)?'river':(/canal/.test(type)?'canal':'water'));
+    const tags=isFlowline
+      ? {waterway:/canal/.test(type)?'canal':'river'}
+      : {natural:'water',water:waterType};
+    const name=String(a.gnisidlabel||'').trim()||label|| (isFlowline?'Mapped river/canal':'Mapped waterbody');
+    return {
+      attributes:{
+        ...a,
+        OBJECTID:'3dhp-'+String(a.OBJECTID??a.id3dhp??''),
+        GNIS_NAME:name,
+        FTYPE:isFlowline?460:436,
+        AREASQKM:Number(a.areasqkm)||0
+      },
+      geometry:feature.geometry||null,
+      _3dhp:true,
+      _flowline:isFlowline,
+      _osmTags:tags,
+      _source:'USGS 3DHP'
+    };
+  }
+  if(waterOK){
+    for(const f of waterResult.value.features||[])all.push(normalize3DHP(f,60));
+  }else{
+    console.warn('USGS 3DHP waterbody query unavailable; using legacy NHD reference fallback',waterResult.reason||waterResult.value?.error);
+    const base=url=>url+'?where='+encodeURIComponent('FTYPE IN (390,436,460,336)')+'&geometry='+encodeURIComponent(p.lng+','+p.lat)+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance='+(r*1609.34)+'&units=esriSRUnit_Meter&outFields=OBJECTID,GNIS_NAME,FTYPE,AREASQKM&returnGeometry=true&outSR=4326&f=json';
+    const urls=[base('https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/12/query'),base('https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/9/query')];
+    const results=await Promise.allSettled(urls.map(u=>fetch(u,{signal:AbortSignal.timeout(15000)}).then(x=>x.json())));
+    for(const result of results)if(result.status==='fulfilled'&&!result.value.error)all.push(...(result.value.features||[]));
+  }
+  if(flowOK){
+    for(const f of flowResult.value.features||[])all.push(normalize3DHP(f,50));
+  }else{
+    console.warn('USGS 3DHP river/canal query unavailable; using legacy NHDPlus HR flowline fallback',flowResult.reason||flowResult.value?.error);
+    const flowBase=url=>url+'?where='+encodeURIComponent('FType=460')+'&geometry='+encodeURIComponent(p.lng+','+p.lat)+'&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance='+(r*1609.34)+'&units=esriSRUnit_Meter&outFields=OBJECTID,GNIS_Name,FType&returnGeometry=true&outSR=4326&f=json';
+    const urls=['https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/3','https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/4'].map(flowBase);
+    const results=await Promise.allSettled(urls.map(u=>fetch(u,{signal:AbortSignal.timeout(15000)}).then(x=>x.json())));
+    for(const result of results)if(result.status==='fulfilled'&&!result.value.error)for(const f of result.value.features||[])for(const path of f.geometry?.paths||[])if(path?.length)all.push({attributes:{OBJECTID:'legacy-flow-'+(f.attributes?.OBJECTID||''),GNIS_NAME:f.attributes?.GNIS_Name||'Unnamed stream/river',FTYPE:460,AREASQKM:0},geometry:{rings:[path]},_flowline:true,_legacy:true});
+  }
   try{const b=bbox(p.lat,p.lng,r),q=`[out:json][timeout:45];(nwr[natural=water][amenity!=fountain][leisure!=swimming_pool](${b});nwr[water](${b});nwr[landuse=reservoir](${b});way[waterway=river](${b});way[waterway=riverbank](${b});way[waterway=stream](${b});way[waterway=canal](${b});relation[waterway=river](${b}););out tags center geom;`,j=await Promise.race([overpass(q),new Promise((_,rej)=>setTimeout(()=>rej(Error('OSM water query timed out after 12s')),12000))]);for(const e of j.elements||[]){let g=[];if(e.geometry?.length)g=[e.geometry.map(x=>[x.lon,x.lat])];else if(e.members?.length)for(const m of e.members)if(m.geometry?.length)g.push(m.geometry.map(x=>[x.lon,x.lat]));const nm=String(e.tags?.name||'').trim().toLowerCase(),am=String(e.tags?.amenity||'').toLowerCase(),le=String(e.tags?.leisure||'').toLowerCase();const rejectNamed=/fountain|swimming pool|splash pad|drinking water|water point|watering place/.test(nm);const rejectTag=['fountain','drinking_water','water_point','watering_place'].includes(am)||le==='swimming_pool';if(g.length&&!rejectNamed&&!rejectTag)all.push({attributes:{OBJECTID:'osm-'+e.id,GNIS_NAME:e.tags?.name||e.tags?.water||e.tags?.waterway||'OSM water feature',FTYPE:e.tags?.waterway?460:436,AREASQKM:0},geometry:{rings:g},_osm:true,_flowline:!!e.tags?.waterway&&e.tags.waterway!=='riverbank',_osmTags:e.tags||{}})}}catch(e){console.warn('OSM water fallback failed',e)}
   const out=[],seen=new Set();for(const f of all){const c=center(f);if(!c)continue;const a=f.attributes||{},k=[a.OBJECTID||'',a.GNIS_NAME||'',c.lat.toFixed(5),c.lng.toFixed(5)].join('|');if(!seen.has(k)){seen.add(k);out.push(f)}}const dedup=[];for(const f of out){const c=center(f);if(!c)continue;const tooClose=dedup.find(g=>{const q=center(g);const sameId=String(f.attributes?.OBJECTID||'')===String(g.attributes?.OBJECTID||'')&&!!f.attributes?.OBJECTID;const fn=String(f.attributes?.GNIS_NAME||f._osmTags?.name||'').trim().toLowerCase(),gn=String(g.attributes?.GNIS_NAME||g._osmTags?.name||'').trim().toLowerCase();return sameId||(q&&fn&&gn&&fn===gn&&miles(c.lat,c.lng,q.lat,q.lng)<0.006)});if(!tooClose)dedup.push(f);else{const fw=waterWidthFt(f),gw=waterWidthFt(tooClose);if((fw??0)>(gw??0))dedup[dedup.indexOf(tooClose)]=f}}return dedup
 }
@@ -284,7 +351,7 @@ function makeFinding(w,i,a){
  const hasRealName=!!rawWaterName&&!/^(unnamed|unknown|river)$/i.test(rawWaterName);
  const isFlowline=!!w._flowline||['stream','ditch','drain','canal','river'].includes(waterwayType);
  const isMinorFlowline=isFlowline;
- const isMajorWater=/lake|reservoir|pond|harsha/.test(nameText+' '+featureType)||(waterwayType==='river'&&hasRealName);
+ const isMajorWater=/lake|reservoir|pond|harsha/.test(nameText+' '+featureType)||(!!w._3dhp&&!w._flowline&&/river|canal|ocean|great lake/.test(String(w.attributes?.featuretypelabel||'')))||(waterwayType==='river'&&hasRealName);
  const pd=pin?miles(c.lat,c.lng,pin.getLatLng().lat,pin.getLatLng().lng):999,nearPin=pd<=.2,baseAnomaly=35+($('vehicle').checked?10:0)+($('manmade').checked?8:0);
  if(isMinorFlowline&&!meaningfulAccess&&!isMajorWater)return null;
  let pr=Math.round(as*.70+baseAnomaly*.30);if($('deprioritize').checked&&as<25)pr=Math.min(pr,25);
