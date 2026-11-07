@@ -34,6 +34,10 @@
   - Coverage is limited to navigationally significant waters and is updated as new surveys become available. The app links to NOAA's viewer rather than treating rendered WMTS tiles as numeric depth values.
 - NOAA NCEI Bathymetric Data Viewer: https://www.ncei.noaa.gov/maps/bathymetry/
 
+## Validation
+
+A GitHub Actions workflow checks the inline application JavaScript and the Phase 1–3 scripts with Node.js syntax validation on the working branch and its pull requests.
+
 ## Important limitation
 
 BlueTopo is not yet queried as a numeric raster by AquaSearcher. NOAA exposes it through WMTS and tiled GeoTIFF products; using rendered map tiles as numeric depths would be unsafe. The app provides the authoritative viewer link, while numeric NOAA samples currently come from the NCEI multibeam mosaic where available. This keeps the scoring honest and avoids changing candidate rankings based on incomplete coastal coverage.
