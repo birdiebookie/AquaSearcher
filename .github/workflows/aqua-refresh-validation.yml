@@ -1,5 +1,16 @@
 name: AquaSearcher water-data refresh validation
 on:
+  pull_request:
+    branches:
+      - car-first-search-fixes
+    paths:
+      - index.html
+      - phase1-foundation.js
+      - phase2-intelligence.js
+      - phase3-precision.js
+      - phase3-target-detection.js
+      - DATA_SOURCES.md
+      - .github/workflows/aqua-refresh-validation.yml
   push:
     branches:
       - feature/water-data-refresh-2026-11-07
