@@ -1,0 +1,45 @@
+name: AquaSearcher water-data refresh validation
+on:
+  push:
+    branches:
+      - feature/water-data-refresh-2026-11-07
+    paths:
+      - index.html
+      - phase1-foundation.js
+      - phase2-intelligence.js
+      - phase3-precision.js
+      - phase3-target-detection.js
+      - DATA_SOURCES.md
+      - .github/workflows/aqua-refresh-validation.yml
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check application JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("index.html").read_text()
+          blocks = re.findall(r'<script([^>]*)>(.*?)</script>', html, re.I | re.S)
+          count = 0
+          for attrs, body in blocks:
+              if re.search(r'\\bsrc\\s*=', attrs, re.I):
+                  continue
+              m = re.search(r'\\btype\\s*=\\s*["\\']([^"\\']+)', attrs, re.I)
+              if m and m.group(1).lower() not in ("text/javascript", "application/javascript"):
+                  continue
+              Path(f"/tmp/aqua-inline-{count}.js").write_text(body)
+              count += 1
+          print(f"Extracted {count} inline JavaScript blocks")
+          PY
+          for file in /tmp/aqua-inline-*.js; do node --check "$file"; done
+          node --check phase1-foundation.js
+          node --check phase2-intelligence.js
+          node --check phase3-precision.js
+          node --check phase3-target-detection.js
