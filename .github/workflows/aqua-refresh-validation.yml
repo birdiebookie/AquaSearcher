@@ -13,6 +13,7 @@ on:
       - .github/workflows/aqua-refresh-validation.yml
   push:
     branches:
+      - car-first-search-fixes
       - feature/water-data-refresh-2026-11-07
     paths:
       - index.html
@@ -34,16 +35,16 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import re
           from pathlib import Path
+          import re
           html = Path("index.html").read_text()
           blocks = re.findall(r'<script([^>]*)>(.*?)</script>', html, re.I | re.S)
           count = 0
           for attrs, body in blocks:
-              if re.search(r'\\bsrc\\s*=', attrs, re.I):
+              low = attrs.lower()
+              if 'src=' in low:
                   continue
-              m = re.search(r'\\btype\\s*=\\s*["\\']([^"\\']+)', attrs, re.I)
-              if m and m.group(1).lower() not in ("text/javascript", "application/javascript"):
+              if 'type=' in low and 'text/javascript' not in low and 'application/javascript' not in low:
                   continue
               Path(f"/tmp/aqua-inline-{count}.js").write_text(body)
               count += 1
