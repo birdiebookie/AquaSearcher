@@ -303,7 +303,7 @@ async function runV16(original){
     const top=af.slice().sort((a,b)=>b.priority-a.priority).slice(0,Math.min(12,af.length));
     for(let i=0;i<top.length;i++){
       await scanAccessCandidate(top[i],rels);
-      if(typeof window.vehicleScan==='function'&&$('vehicle')?.checked){try{await window.vehicleScan(top[i],rels,true)}catch(e){console.warn('V16 vehicle scan',e)}}
+      if(typeof window.vehicleScan==='function'&&$('vehicle')?.checked&&top[i].waterBoundaryGeometry?.rings?.length&&!top[i].waterBoundaryIsFlowline){try{await window.vehicleScan(top[i],rels,true)}catch(e){console.warn('V16 water-only vehicle scan',e)}}
     }
     window.findings=(window.findings||[]).concat(af);
     if(typeof window.render==='function')window.render();
