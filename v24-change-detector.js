@@ -84,14 +84,14 @@ async function run(){
     const rs=(await getCatalog()).slice();Z=19;const t9=txy(p.lat,p.lng,19);if(!await get(url(rs[rs.length-1],19,Math.floor(t9.x),Math.floor(t9.y))))Z=18;
     const t=txy(p.lat,p.lng,Z),cx=Math.floor(t.x),cy=Math.floor(t.y),m=mpp(p.lat,Z),frames=[];let last=null;
     $('scan').textContent='V24 CHANGE CHECK: loading mapped water from OpenStreetMap…';
-    const OM=await osmWater(cx,cy,m);
+    const OM=await osmWater(cx,cy,m);if(!OM)throw Error('No mapped waterbody polygon was available. V24 will not infer water from image colors.');
     for(let i=0;i<rs.length;i++){
       $('scan').textContent='V24 CHANGE CHECK: photo '+(i+1)+'/'+rs.length+' · '+frames.length+' different photos found';
       const c=await get(url(rs[i],Z,cx,cy));if(!c)continue;
       const s=sig(c);if(last&&same(s,last.s)){last.to=rs[i].date;continue}
       const F=await frame(rs[i],cx,cy,c,OM);F.s=s;F.date=rs[i].date;F.to=rs[i].date;frames.push(F);last=F;
     }
-    if(!OM)throw Error('No mapped waterbody polygon was available. V24 will not infer water from image colors.');const ev=[],{SW,NW}={SW:OM,NW:dilate(OM)};
+    const ev=[],{SW,NW}={SW:OM,NW:dilate(OM)};
     let wp=0;for(let q=0;q<SW.length;q++)wp+=SW[q];
     for(let i=1;i<frames.length;i++){const A=frames[i-1],B=frames[i];if(A.water<200||B.water<200)continue;
       for(const b of blobs(A,B,m,SW,NW)){
@@ -117,12 +117,15 @@ window.runV24ChangeCheck=run;
 function pinInsideVerifiedWater(p){
   const fs=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline);
   return fs.some(f=>{
-    const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);let inside=false;
+    const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
     for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
       const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
       if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+      const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+      const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+      nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
     }
-    return inside;
+    return inside&&nearest>=5;
   });
 }
 
