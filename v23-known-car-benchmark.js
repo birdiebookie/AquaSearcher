@@ -7,7 +7,7 @@
 const MOON={lat:26.6249982,lng:-80.2276219};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function insideWaterFeature(f,p){
-  const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(!rings.length||f.waterBoundaryIsFlowline)return false;
+  const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
   let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
   for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
     const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
