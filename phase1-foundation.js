@@ -168,7 +168,7 @@ function normalizeAccessList(list){
 async function verifyMappedWaterBoundary(f){
   // Target coordinates must be inside the source waterbody polygon itself.
   // Flowlines and proximity buffers are never accepted as proof of underwater location.
-  if(!f||f.waterBoundaryIsFlowline)return {status:'NOT_VERIFIED',source:'flowline is not a waterbody boundary'};
+  if(window.__aquaWaterSafetyHealthy!==true||!f||f.waterBoundaryIsFlowline)return {status:'NOT_VERIFIED',source:'flowline is not a waterbody boundary'};
   const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
   if(!rings.length)return {status:'NOT_VERIFIED',source:'no waterbody polygon geometry'};
   let inside=false,nearest=Infinity;const sx=111320*Math.cos(f.lat*Math.PI/180),sy=111320;
