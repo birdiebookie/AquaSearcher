@@ -9,7 +9,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function wait(ms){return new Promise(r=>setTimeout(r,ms))}
 function hav(a,b){const R=3958.7613,p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dl=(b.lat-a.lat)*Math.PI/180,dg=(b.lng-a.lng)*Math.PI/180,h=Math.sin(dl/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dg/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
 function insideWater(f,p){
- const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(!rings.length||f.waterBoundaryIsFlowline)return false;
+ const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
  let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
   const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
