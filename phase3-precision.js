@@ -150,7 +150,7 @@ function downloadCSV(){
 async function runPhase3(manual){
   const arr=window.__aquaFindings;
   if(!Array.isArray(arr)||!arr.length){if(manual)toast('Run Phase 1/2 first.');return}
-  const candidates=arr.filter(f=>!f.isPinTest&&!f.accessPoint);
+  const candidates=arr.filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline&&Array.isArray(f.waterBoundaryGeometry?.rings)&&f.waterBoundaryGeometry.rings.length>0);
   if(!candidates.length){if(manual)toast('No water candidates available for Phase 3.');return}
   const top=candidates.slice().sort((a,b)=>(b.phase2Priority||b.priority||0)-(a.phase2Priority||a.priority||0)).slice(0,40);
   if($('phase3status'))$('phase3status').textContent='Running precision verification across Phase 2 candidates…';
