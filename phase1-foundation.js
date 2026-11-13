@@ -171,14 +171,17 @@ async function verifyMappedWaterBoundary(f){
   if(!f||f.waterBoundaryIsFlowline)return {status:'NOT_VERIFIED',source:'flowline is not a waterbody boundary'};
   const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
   if(!rings.length)return {status:'NOT_VERIFIED',source:'no waterbody polygon geometry'};
-  let inside=false;
+  let inside=false,nearest=Infinity;const sx=111320*Math.cos(f.lat*Math.PI/180),sy=111320;
   for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
     const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
     if((yi>f.lat)!==(yj>f.lat)&&f.lng<(xj-xi)*(f.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const ax=(xi-f.lng)*sx,ay=(yi-f.lat)*sy,bx=(xj-f.lng)*sx,by=(yj-f.lat)*sy,dx=bx-ax,dy=by-ay;
+    const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+    nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
   }
-  return inside
-    ? {status:'VERIFIED_WATER',source:'exact source waterbody polygon containment'}
-    : {status:'NOT_VERIFIED',source:'coordinate is outside source waterbody polygon'};
+  return inside&&nearest>=5
+    ? {status:'VERIFIED_WATER',source:'exact source waterbody polygon containment with 5m shoreline clearance'}
+    : {status:'NOT_VERIFIED',source:inside?'within 5m of shoreline':'coordinate is outside source waterbody polygon'};
 }
 async function enforceWaterBoundaries(){
  const arr=window.__aquaFindings;
