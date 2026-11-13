@@ -64,7 +64,7 @@ async function image(url){
 }
 async function mosaic(rel,p){
   const z=19,n=2**z,x=(p.lng+180)/360*n,y=(1-Math.asinh(Math.tan(p.lat*Math.PI/180))/Math.PI)/2*n;
-  const tx=Math.floor(x),ty=Math.floor(y),c=document.createElement('canvas');c.width=768;c.height=768;
+  const tx=Math.floor(x),ty=Math.floor(y),c=document.createElement('canvas');c.width=768;c.height=768;c.__aquaOrigin={x:(x-tx)*256+256,y:(y-ty)*256+256};
   const ctx=c.getContext('2d');
   let good=0;
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
@@ -115,7 +115,7 @@ async function detectCanvas(src,lat,lng,metersPerPixelOverride){
       {canvas:centerCrop(src,384,384,256,256),scale:.5,map:(x,y)=>({x:256+x*.5,y:256+y*.5})}
     ];
     const mpp=Number(metersPerPixelOverride)||156543.03392*Math.cos(lat*Math.PI/180)/(2**19);
-    const toLL=(x,y)=>({lat:lat+(384-y)*mpp/111320,lng:lng+(x-384)*mpp/(111320*Math.max(.15,Math.cos(lat*Math.PI/180)))});
+    const origin=src.__aquaOrigin||{x:384,y:384};const toLL=(x,y)=>({lat:lat+(origin.y-y)*mpp/111320,lng:lng+(x-origin.x)*mpp/(111320*Math.max(.15,Math.cos(lat*Math.PI/180)))});
     const out=[];
     for(const view of views){
       const ds=await window.__aquaP3Coco.detect(view.canvas,25,.12);
@@ -140,12 +140,15 @@ function insideWaterFeature(f,p){
   if(!f||f.waterBoundaryIsFlowline)return false;
   const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
   if(!rings.length)return false;
-  let inside=false;
+  let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
   for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
     const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
     if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+    const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+    nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
   }
-  return inside;
+  return inside&&nearest>=5;
 }
 function candidatePoints(){
   // Never scan the search pin, ramps, docks, or other access coordinates as target points.
