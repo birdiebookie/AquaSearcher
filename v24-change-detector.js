@@ -36,8 +36,8 @@ function blobs(A,B,m,SW,NW){
       for(const o of[1,-1,768,-768]){const k=p+o;if(k>=0&&k<N&&on[k]&&!seen[k]){seen[k]=1;q.push(k)}}}
     const L=Math.max(x1-x0+1,y1-y0+1)*m*3.281,Wd=Math.min(x1-x0+1,y1-y0+1)*m*3.281,fill=n/((x1-x0+1)*(y1-y0+1));
     if(L<9||L>26||Wd<3.5||Wd>12||fill<.35)continue;
-    const cx=(x0+x1)>>1,cy=(y0+y1)>>1,ring=[[cx,y0-12],[cx,y1+12],[x0-12,cy],[x1+12,cy]].filter(([a,b])=>a>=0&&b>=0&&a<768&&b<768&&SW[b*768+a]).length;
-    if(ring<2)continue;
+    const cx=(x0+x1)>>1,cy=(y0+y1)>>1,boxArea=(x1-x0+1)*(y1-y0+1);let waterPixels=0;for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++)if(SW[yy*768+xx])waterPixels++;const ring=[[cx,y0-12],[cx,y1+12],[x0-12,cy],[x1+12,cy]].filter(([a,b])=>a>=0&&b>=0&&a<768&&b<768&&SW[b*768+a]).length;
+    if(!SW[cy*768+cx]||waterPixels/Math.max(1,boxArea)<.85||ring<2)continue;
     out.push({x0,x1,y0,y1,cx,cy,L,Wd});
   }
   return out;
@@ -60,12 +60,12 @@ function dilate(SW){
 async function osmWater(cx,cy,m){
   try{
     const a=toLL(cx-1,cy-1,Z),b=toLL(cx+2,cy+2,Z),bb='('+b.lat+','+a.lng+','+a.lat+','+b.lng+')';
-    const j=await overpass('[out:json][timeout:25];(way["natural"="water"]'+bb+';relation["natural"="water"]'+bb+';way["landuse"="reservoir"]'+bb+';way["waterway"~"canal|river|stream|ditch|drain"]'+bb+';);out geom;');
+    const j=await overpass('[out:json][timeout:25];(way["natural"="water"]'+bb+';relation["natural"="water"]'+bb+';way["landuse"="reservoir"]'+bb+';way["water"~"lake|pond|reservoir"]'+bb+';);out geom;');
     const c=document.createElement('canvas');c.width=c.height=768;const g=c.getContext('2d');g.fillStyle=g.strokeStyle='#fff';
     const P=q=>{const t=txy(q.lat,q.lon,Z);return[(t.x-cx+1)*256,(t.y-cy+1)*256]};
     const path=pts=>pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));
     for(const e of j.elements||[]){
-      if(e.type==='way'&&e.geometry){g.beginPath();path(e.geometry.map(P));if(e.tags&&e.tags.waterway){g.lineWidth=Math.max(3,8/m);g.stroke()}else{g.closePath();g.fill()}}
+      if(e.type==='way'&&e.geometry&&e.geometry.length>=4){g.beginPath();path(e.geometry.map(P));g.closePath();g.fill()}
       if(e.type==='relation'&&e.members){g.beginPath();for(const mm of e.members)if(mm.geometry){path(mm.geometry.map(P));g.closePath()}g.fill('evenodd')}
     }
     const d=g.getImageData(0,0,768,768).data,M=new Uint8Array(768*768);let n=0;
@@ -78,7 +78,7 @@ function shifted(F,b,target){for(const ox of[-6,0,6])for(const oy of[-6,0,6])if(
 async function crop(F,b,cx,cy){const c=document.createElement('canvas');c.width=c.height=150;const g=c.getContext('2d');for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const t=await get(url(F.r,Z,cx+dx,cy+dy));if(t)g.drawImage(t,((dx+1)*256-b.cx+60)*1.25,((dy+1)*256-b.cy+60)*1.25,320,320)}
   try{return c.toDataURL('image/jpeg',.8)}catch(e){return''}}
 async function run(){
-  const p=pin();if(!p){toast('Set a pin or location first.');return}
+  const p=pin();if(!p){toast('Set a pin or location first.');return}if(!pinInsideVerifiedWater(p)){toast('V24 stopped: the pin is not inside a verified mapped waterbody polygon. Run the main water search and place the pin in the water.');$('scan').textContent='V24 BLOCKED — pin is not inside verified water.';return}
   const since=parseInt($('v24since').value)||null;
   try{
     const rs=(await getCatalog()).slice();Z=19;const t9=txy(p.lat,p.lng,19);if(!await get(url(rs[rs.length-1],19,Math.floor(t9.x),Math.floor(t9.y))))Z=18;
@@ -91,7 +91,7 @@ async function run(){
       const s=sig(c);if(last&&same(s,last.s)){last.to=rs[i].date;continue}
       const F=await frame(rs[i],cx,cy,c,OM);F.s=s;F.date=rs[i].date;F.to=rs[i].date;frames.push(F);last=F;
     }
-    const ev=[],{SW,NW}=OM?{SW:OM,NW:dilate(OM)}:stableWater(frames);
+    if(!OM)throw Error('No mapped waterbody polygon was available. V24 will not infer water from image colors.');const ev=[],{SW,NW}={SW:OM,NW:dilate(OM)};
     let wp=0;for(let q=0;q<SW.length;q++)wp+=SW[q];
     for(let i=1;i<frames.length;i++){const A=frames[i-1],B=frames[i];if(A.water<200||B.water<200)continue;
       for(const b of blobs(A,B,m,SW,NW)){
@@ -108,12 +108,24 @@ async function run(){
     ev.sort((a,b)=>b.score-a.score);
     const top=(ev.some(e=>e.keep>=1)?ev.filter(e=>e.keep>=1):ev).slice(0,6);
     for(const e of top){e.ia=await crop(e.A,e.b,cx,cy);e.ib=await crop(e.B,e.b,cx,cy)}
-    let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'<br><b>Water used:</b> '+(OM?'OpenStreetMap water map':'photo colors (no OSM water found)')+' · '+Math.round(wp*100/SW.length)+'% of the view'+'<br><b>The different photos:</b> '+frames.map((F,i)=>(i+1)+') '+F.date+(F.to!==F.date?' → '+F.to:'')).join(' · ')+'</p>';
+    let h='<h2>🔎 V24 CHANGE-OVER-TIME CHECK</h2><p><b>Spot:</b> '+p.lat.toFixed(6)+', '+p.lng.toFixed(6)+'<br><b>Photo dates checked:</b> '+rs.length+' · <b>Truly different photos:</b> '+frames.length+'<br><b>Raw changes found:</b> '+ev.length+' · <b>Changes that stayed put:</b> '+ev.filter(e=>e.keep>=1).length+(since?'<br><b>Missing since:</b> '+since:'')+'<br><b>Water used:</b> '+'verified OpenStreetMap waterbody polygon'+' · '+Math.round(wp*100/SW.length)+'% of the view'+'<br><b>The different photos:</b> '+frames.map((F,i)=>(i+1)+') '+F.date+(F.to!==F.date?' → '+F.to:'')).join(' · ')+'</p>';
     h+=top.length?top.map((e,i)=>'<hr><p><b>#'+(i+1)+' '+e.type+'</b> · score '+e.score+'/100'+(e.near?' · ⭐ near missing date':'')+'<br>Between <b>'+e.before+'</b> and <b>'+e.after+'</b> · '+(e.type==='APPEARED'?'stayed for '+e.keep+' later':'was there in '+e.keep+' earlier')+' photo(s) · about '+Math.round(e.L)+' × '+Math.round(e.Wd)+' ft<br>'+e.lat.toFixed(6)+', '+e.lng.toFixed(6)+'</p><div style="display:flex;gap:8px"><div><small>BEFORE</small><br><img src="'+e.ia+'"></div><div><small>AFTER</small><br><img src="'+e.ib+'"></div></div>').join(''):'<p><b>No car-sized change that stayed put was found.</b> This does not prove no car is there: deep or murky water can hide one.</p>';
     h+=await strip(frames,cx,cy,t);showModal(h);$('scan').textContent='V24 CHANGE CHECK COMPLETE — '+top.length+' lasting change(s).';
   }catch(e){toast('V24 change check failed: '+e.message);$('scan').textContent='V24 ERROR: '+e.message}
 }
 window.runV24ChangeCheck=run;
+function pinInsideVerifiedWater(p){
+  const fs=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline);
+  return fs.some(f=>{
+    const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);let inside=false;
+    for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+      const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+      if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+    }
+    return inside;
+  });
+}
+
 async function strip(frames,cx,cy,t){const out=[];for(const F of frames){const c=document.createElement('canvas');c.width=c.height=180;const g=c.getContext('2d'),px=(t.x-cx+1)*256,py=(t.y-cy+1)*256,k=180/240;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const im=await get(url(F.r,Z,cx+dx,cy+dy));if(im)g.drawImage(im,((dx+1)*256-px+120)*k,((dy+1)*256-py+120)*k,256*k,256*k)}g.strokeStyle='red';g.lineWidth=2;g.strokeRect(80,80,20,20);let s='';try{s=c.toDataURL('image/jpeg',.85)}catch(e){}out.push('<div><small>'+F.date+'</small><br><img src="'+s+'"></div>')}return'<hr><p><b>Photo strip at your pin</b> (red box = pin). Can you see the car in any of these?</p><div style="display:flex;flex-wrap:wrap;gap:6px">'+out.join('')+'</div>'}
 function install(){
   if($('v24btn'))return;const host=document.querySelector('.detail > div:nth-child(2) > div:last-child');if(!host)return;
