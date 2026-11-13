@@ -139,7 +139,7 @@ async function rowNAIP(p){
 function insideWaterFeature(f,p){
   if(!f||f.waterBoundaryIsFlowline)return false;
   const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
-  if(!rings.length)return false;
+  if(window.__aquaWaterSafetyHealthy!==true||!rings.length)return false;
   let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
   for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
     const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
