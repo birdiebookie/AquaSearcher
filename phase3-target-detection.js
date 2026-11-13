@@ -105,19 +105,25 @@ function localObjectness(src){
   }
   return Math.round(Math.min(100,(edge/n*.65+contrast/n*.35)*100));
 }
-async function detectCanvas(src,lat,lng){
+async function detectCanvas(src,lat,lng,metersPerPixelOverride){
   if(typeof cocoSsd==='undefined')return[];
   try{
     if(!window.__aquaP3Coco)window.__aquaP3Coco=await cocoSsd.load({base:'mobilenet_v2'});
-    const views=[src,centerCrop(src,384,384,384,384),centerCrop(src,384,384,256,256)];
+    const views=[
+      {canvas:src,scale:1,map:(x,y)=>({x,y})},
+      {canvas:centerCrop(src,384,384,384,384),scale:.75,map:(x,y)=>({x:192+x*.75,y:192+y*.75})},
+      {canvas:centerCrop(src,384,384,256,256),scale:.5,map:(x,y)=>({x:256+x*.5,y:256+y*.5})}
+    ];
+    const mpp=Number(metersPerPixelOverride)||156543.03392*Math.cos(lat*Math.PI/180)/(2**19);
+    const toLL=(x,y)=>({lat:lat+(384-y)*mpp/111320,lng:lng+(x-384)*mpp/(111320*Math.max(.15,Math.cos(lat*Math.PI/180)))});
     const out=[];
-    for(const v of views){
-      const ds=await window.__aquaP3Coco.detect(v,25,.12);
+    for(const view of views){
+      const ds=await window.__aquaP3Coco.detect(view.canvas,25,.12);
       for(const o of ds.filter(x=>['car','truck','boat','bus','motorcycle'].includes(x.class))){
-        const px=Math.max(o.bbox?.[2]||0,o.bbox?.[3]||0);
-        const mPerPx=(156543.03392*Math.cos(lat*Math.PI/180)/(2**19))*(v===src?1:384/512);
-        const ft=px*mPerPx*3.28084;
-        out.push({label:o.class,confidence:o.score,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=8,lat,lng});
+        const [bx,by,bw,bh]=o.bbox||[0,0,0,0],cx=bx+bw/2,cy=by+bh/2;
+        const center=view.map(cx,cy),corners=[[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx,by+bh]].map(([x,y])=>{const q=view.map(x,y);return toLL(q.x,q.y)});
+        const ll=toLL(center.x,center.y),ft=Math.max(bw,bh)*view.scale*mpp*3.28084;
+        out.push({label:o.class,confidence:o.score,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=8,lat:ll.lat,lng:ll.lng,footprint:corners});
       }
     }
     return out;
@@ -125,9 +131,9 @@ async function detectCanvas(src,lat,lng){
 }
 async function rowNAIP(p){
   try{
-    const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng);
+    const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng,230/768),water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline),safeNh=nh.filter(h=>h.footprint?.length===4&&water.some(f=>h.footprint.every(q=>insideWaterFeature(f,q))));
     const key=p.lat.toFixed(5)+','+p.lng.toFixed(5),r=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
-    r.naipHits.push(...nh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
+    r.naipHits.push(...safeNh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
   }catch(e){/* NAIP Plus is supplemental; never block the historical scan */}
 }
 function insideWaterFeature(f,p){
@@ -151,6 +157,7 @@ function candidatePoints(){
   for(const f of water.slice(0,24)){
     const center=point(f.lat,f.lng);
     if(center&&insideWaterFeature(f,center))out.push(center);
+    if(!center)continue;
     for(const radius of [12,28]){
       for(const p of around(center,radius)){
         if(insideWaterFeature(f,p))out.push(p);
@@ -175,11 +182,11 @@ async function run(manual){
         const p=pts[pi];
         if($('scan'))$('scan').textContent='Phase 3 target search: '+rel.date+' · point '+(pi+1)+'/'+pts.length;
         try{
-          const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),obj=localObjectness(m);
+          const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline),safeHits=hits.filter(h=>h.footprint?.length===4&&water.some(f=>h.footprint.every(q=>insideWaterFeature(f,q)))),obj=localObjectness(m);
           if(ri===0)await rowNAIP(p);
           const key=p.lat.toFixed(5)+','+p.lng.toFixed(5);
           const row=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
-          row.years.push(rel.date);row.hits.push(...hits);row.objectness.push(obj);
+          row.years.push(rel.date);row.hits.push(...safeHits);row.objectness.push(obj);
           records.set(key,row);
         }catch(e){}
         await sleep(2);
