@@ -130,15 +130,34 @@ async function rowNAIP(p){
     r.naipHits.push(...nh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
   }catch(e){/* NAIP Plus is supplemental; never block the historical scan */}
 }
+function insideWaterFeature(f,p){
+  if(!f||f.waterBoundaryIsFlowline)return false;
+  const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
+  if(!rings.length)return false;
+  let inside=false;
+  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+    if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+  }
+  return inside;
+}
 function candidatePoints(){
+  // Never scan the search pin, ramps, docks, or other access coordinates as target points.
+  // Every scan point is clipped to an already accepted waterbody polygon.
+  const water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline&&Array.isArray(f.waterBoundaryGeometry?.rings));
   const out=[];
-  if(window.__aquaPinTest)out.push(point(window.__aquaPinTest.lat,window.__aquaPinTest.lng));
-  const pin=window.pin?.getLatLng?.();if(pin)out.push(point(pin.lat,pin.lng));
-  for(const a of window.aquaV16Access||[])out.push(point(a.lat,a.lng));
-  for(const f of window.__aquaFindings||[])if(!f.isPinTest&&!f.accessPoint)out.push(point(f.lat,f.lng));
-  const base=uniquePts(out),expanded=[];
-  for(const p of base.slice(0,24))expanded.push(...around(p,0),...around(p,12),...around(p,28));
-  return uniquePts(expanded).slice(0,96);
+  const pin=window.pin?.getLatLng?.();
+  if(pin&&water.some(f=>insideWaterFeature(f,pin)))out.push(point(pin.lat,pin.lng));
+  for(const f of water.slice(0,24)){
+    const center=point(f.lat,f.lng);
+    if(center&&insideWaterFeature(f,center))out.push(center);
+    for(const radius of [12,28]){
+      for(const p of around(center,radius)){
+        if(insideWaterFeature(f,p))out.push(p);
+      }
+    }
+  }
+  return uniquePts(out).slice(0,96);
 }
 async function run(manual){
   if(P3.running)return;
