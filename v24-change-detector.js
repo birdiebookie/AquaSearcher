@@ -115,6 +115,7 @@ async function run(){
 }
 window.runV24ChangeCheck=run;
 function pinInsideVerifiedWater(p){
+  if(window.__aquaWaterSafetyHealthy!==true)return false;
   const fs=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline);
   return fs.some(f=>{
     const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
