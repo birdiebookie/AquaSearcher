@@ -266,12 +266,15 @@ function waterWidthFt(w){return waterDimensionsFt(w)?.widthFt??null}
 function waterLengthFt(w){return waterDimensionsFt(w)?.lengthFt??null}
 function pointInWaterGeometry(lat,lng,g){
  const rings=(g?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(!rings.length)return false;
- let inside=false;
+ let inside=false,nearest=Infinity;const sx=111320*Math.cos(lat*Math.PI/180),sy=111320;
  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
   const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
   if((yi>lat)!==(yj>lat)&&lng<(xj-xi)*(lat-yi)/(yj-yi)+xi)inside=!inside;
+  const ax=(xi-lng)*sx,ay=(yi-lat)*sy,bx=(xj-lng)*sx,by=(yj-lat)*sy,dx=bx-ax,dy=by-ay;
+  const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+  nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
  }
- return inside;
+ return inside&&nearest>=5;
 }
 function makeFinding(w,i,a){const tags=w._osmTags||w.tags||{},nm=String(w.attributes?.GNIS_NAME||tags.name||'').trim().toLowerCase();if(tags.amenity==='fountain'||tags.amenity==='drinking_water'||tags.amenity==='water_point'||tags.amenity==='watering_place'||tags.leisure==='swimming_pool'||/fountain|swimming pool|splash pad|drinking water|water point|watering place/.test(nm))return null;const target=pin?pin.getLatLng():null,c=featurePoint(w,target);if(w._flowline||!Array.isArray(w.geometry?.rings))return null;if(!c||!pointInWaterGeometry(c.lat,c.lng,w.geometry))return null;const dims=waterDimensionsFt(w);if(!dims||dims.widthFt<40||dims.lengthFt<40)return null;const widthFt=dims.widthFt,lengthFt=dims.lengthFt;const n=nearest(c,a),as=n.best?Math.max(0,Math.min(100,Math.round(100-n.distance*120+n.best.boost))):5;
 const accessType=String(n.best?.type||'none').toLowerCase();
