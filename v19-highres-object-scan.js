@@ -16,9 +16,22 @@ function hav(a,b){
   return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
 }
 
+function insideWater(f,p){
+ const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(!rings.length||f.waterBoundaryIsFlowline)return false;
+ let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+ for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+  const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+  if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+  const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+  const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+  nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+ }
+ return inside&&nearest>=5;
+}
 function targetPoints(f){
+  if(!f?.waterBoundaryGeometry?.rings?.length||f.waterBoundaryIsFlowline)return[];
   const out=[], add=(lat,lng,score,why)=>{
-    if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;
+    if(!Number.isFinite(+lat)||!Number.isFinite(+lng)||!insideWater(f,{lat:+lat,lng:+lng}))return;
     if(!out.some(p=>hav(p,{lat:+lat,lng:+lng})<0.003)){
       out.push({lat:+lat,lng:+lng,score:+score||0,why:why||'historical target'});
     }
@@ -50,7 +63,7 @@ async function mosaic(r,lat,lng){
   const z=18,n=2**z;
   const x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;
   const cx=Math.floor(x),cy=Math.floor(y),fx=x-cx,fy=y-cy;
-  const c=document.createElement('canvas');c.width=768;c.height=768;
+  const c=document.createElement('canvas');c.width=768;c.height=768;c.__aquaOrigin={x:(x-cx)*256+256,y:(y-cy)*256+256};
   const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
   let ok=0;
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
@@ -67,23 +80,29 @@ async function mosaic(r,lat,lng){
   return c;
 }
 function crops(src){
-  const out=[src];
+  const out=[src];src.__aquaScale=1;src.__aquaOffset={x:0,y:0};
   // Center and overlapping 384/512px windows preserve enough context while
   // giving the detector a much larger vehicle footprint than the old 256px tile.
   for(const size of [512,384,320]){
     for(const [x,y] of [[384,384],[256,384],[512,384],[384,256],[384,512]]){
       const c=document.createElement('canvas');c.width=512;c.height=512;
-      c.__aquaSourceSize=size;
+      c.__aquaSourceSize=size;c.__aquaScale=size/512;c.__aquaOffset={x:x-size/2,y:y-size/2};
       c.getContext('2d').drawImage(src,x-size/2,y-size/2,size,size,0,0,512,512);
       out.push(c);
     }
   }
   return out;
 }
-function estimateFt(det,lat,sourcePx){
-  const px=Math.max(det.bbox?.[2]||0,det.bbox?.[3]||0);
-  const mpp=(156543.03392*Math.cos(lat*Math.PI/180)/(2**18))*(sourcePx/512);
-  return px*mpp*3.28084;
+function estimateFt(det,lat,c){
+  const px=Math.max(det.bbox?.[2]||0,det.bbox?.[3]||0),mpp=156543.03392*Math.cos(lat*Math.PI/180)/(2**18);
+  return px*(c.__aquaScale||1)*mpp*3.28084;
+}
+function detectionFootprint(src,c,d,p){
+  const [x,y,w,h]=d.bbox||[0,0,0,0],corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+  if(corners.some(([a,b])=>a<0||b<0||a>c.width||b>c.height))return null;
+  const origin=src.__aquaOrigin||{x:384,y:384},off=c.__aquaOffset||{x:0,y:0},scale=c.__aquaScale||1,n=2**18,mpp=156543.03392*Math.cos(p.lat*Math.PI/180)/n;
+  const toLL=(a,b)=>{const X=origin.x+off.x+a*scale,Y=origin.y+off.y+b*scale;return{lat:p.lat+(origin.y-Y)*mpp/111320,lng:p.lng+(X-origin.x)*mpp/(111320*Math.max(.15,Math.cos(p.lat*Math.PI/180)))}};
+  return corners.map(([a,b])=>toLL(a,b));
 }
 
 async function install(){
@@ -131,10 +150,11 @@ async function install(){
             const ds=await model.detect(c,30,.08);
             for(const d of ds){
               if(!['car','truck','boat','bus','motorcycle'].includes(d.class))continue;
-              const ft=estimateFt(d,t.lat,c.__aquaSourceSize||768);
+              const footprint=detectionFootprint(m,c,d,t);if(!footprint||!footprint.every(q=>insideWater(f,q)))continue;
+              const ft=estimateFt(d,t.lat,c.__aquaSourceSize||768),center=footprint.reduce((v,q)=>({lat:v.lat+q.lat/4,lng:v.lng+q.lng/4}),{lat:0,lng:0});
               if(ft<8)continue;
               hits.push({
-                label:d.class,confidence:d.score,year:r.date,lat:t.lat,lng:t.lng,
+                label:d.class,confidence:d.score,year:r.date,lat:center.lat,lng:center.lng,footprint,
                 estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,
                 highResolution:true,historicalTarget:true,
                 targetScore:t.score,targetReason:t.why
