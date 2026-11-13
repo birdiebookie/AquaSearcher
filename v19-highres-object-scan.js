@@ -151,7 +151,7 @@ async function install(){
             for(const d of ds){
               if(!['car','truck','boat','bus','motorcycle'].includes(d.class))continue;
               const footprint=detectionFootprint(m,c,d,t);if(!footprint||!footprint.every(q=>insideWater(f,q)))continue;
-              const ft=estimateFt(d,t.lat,c.__aquaSourceSize||768),center=footprint.reduce((v,q)=>({lat:v.lat+q.lat/4,lng:v.lng+q.lng/4}),{lat:0,lng:0});
+              const ft=estimateFt(d,t.lat,c),center=footprint.reduce((v,q)=>({lat:v.lat+q.lat/4,lng:v.lng+q.lng/4}),{lat:0,lng:0});
               if(ft<8)continue;
               hits.push({
                 label:d.class,confidence:d.score,year:r.date,lat:center.lat,lng:center.lng,footprint,
