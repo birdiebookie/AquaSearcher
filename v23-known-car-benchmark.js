@@ -6,6 +6,18 @@
 'use strict';
 const MOON={lat:26.6249982,lng:-80.2276219};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function insideWaterFeature(f,p){
+  const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
+  let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+    if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+    const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+    nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+  }
+  return inside&&nearest>=5;
+}
 function v17Patch(src,size){
   const c=document.createElement('canvas');c.width=512;c.height=512;
   const x=c.getContext('2d');x.imageSmoothingQuality='high';
@@ -51,11 +63,8 @@ function report(v17,current){
   const html='<h2>🚗 KNOWN-CAR RECOVERY BENCHMARK</h2>'+
     '<p><b>Ground truth:</b> Moon Bay Circle, Wellington, FL — '+MOON.lat+', '+MOON.lng+'</p>'+
     '<p>This is a benchmark location where a submerged vehicle is known to be visible in historical Google Earth imagery. AquaSearcher imagery is labeled separately as Esri Wayback.</p>'+
-    '<hr><h3>V17 detector</h3>'+
-    '<p><b>Model:</b> MobileNet v1 multi-scale<br><b>Historical releases tested:</b> '+v17.releaseDates.length+
-    '<br><b>Search points:</b> '+v17.points+'<br><b>Releases with vehicle-class hits:</b> '+v17.years.length+
-    (best?'<br><b>Best hit:</b> '+best.label+' · '+Math.round(best.confidence*100)+'% · '+best.year:'<br><b>Result:</b> NO VEHICLE-CLASS HIT')+
-    '</p>'+
+    '<hr><h3>Legacy V17 benchmark</h3>'+
+    '<p>Disabled because its older multi-point scan did not verify complete object footprints against water boundaries. The current detector below only counts detections whose full footprint lies inside mapped water.</p>'+
     '<hr><h3>Current detector</h3>'+
     '<p>'+ (current?'Current V22/V23 detector returned <b>'+((current.best&&current.best.label)||'no vehicle-class hit')+
       '</b> with '+((current.historicalReleasesWithHits)||0)+' historical release(s) showing hits.':'Current detector result unavailable.')+'</p>'+
@@ -67,18 +76,17 @@ async function run(){
   try{
     setPin(MOON.lat,MOON.lng,true);
     $('from').value='1995';$('to').value='2024';$('depth').value='all';
+    const water=(window.__aquaFindings||[]).find(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline&&insideWaterFeature(f,MOON));
+    if(!water)throw Error('Run the main water search around Moon Bay first. The benchmark pin must be inside a verified waterbody polygon.');
     const rs=releases(await getCatalog());
     if(!rs.length)throw Error('No Esri Wayback releases available.');
-    toast('Running the original V17 known-car detector at Moon Bay…');
-    const v17=await v17Scan(rs);
-    let current=null;
-    try{
-      const f={id:'moon-benchmark',name:'MOON BAY KNOWN CAR',ftype:'known submerged vehicle',lat:MOON.lat,lng:MOON.lng,
-        priority:100,access:100,anomaly:0,isPinTest:true,samples:microSamples({lat:MOON.lat,lng:MOON.lng}),label:'TEST'};
-      if(typeof window.vehicleScan==='function')current=await window.vehicleScan(f,rs,true);
-      report(v17,f.veh||{best:current,historicalReleasesWithHits:0});
-      $('loc').value=MOON.lat.toFixed(7)+', '+MOON.lng.toFixed(7);
-    }catch(e){report(v17,null)}
+    toast('Running the water-only known-car benchmark at Moon Bay…');
+    const f={...water,id:'moon-benchmark',name:'MOON BAY KNOWN CAR',ftype:'known submerged vehicle',lat:MOON.lat,lng:MOON.lng,
+      priority:100,access:100,anomaly:0,isPinTest:true,samples:[{lat:MOON.lat,lng:MOON.lng}],label:'TEST',
+      waterBoundaryGeometry:water.waterBoundaryGeometry,waterBoundaryIsFlowline:false};
+    let current=null;if(typeof window.vehicleScan==='function')current=await window.vehicleScan(f,rs,true);
+    report({best:null,releaseDates:[],years:[],points:0},f.veh||{best:current,historicalReleasesWithHits:0});
+    $('loc').value=MOON.lat.toFixed(7)+', '+MOON.lng.toFixed(7);
   }catch(e){toast('Known-car benchmark failed: '+e.message);$('scan').textContent='KNOWN-CAR BENCHMARK ERROR: '+e.message}
 }
 window.runMoonBayBenchmark=run;

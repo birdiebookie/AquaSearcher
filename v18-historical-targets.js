@@ -12,11 +12,23 @@ const near=(a,b)=>{
   const h=Math.sin(dl/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dg/2)**2;
   return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
 };
+function insideWater(f,p){
+ const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
+ let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+ for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+  const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+  if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+  const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+  const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+  nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+ }
+ return inside&&nearest>=5;
+}
 function historicalTargetPoints(f){
   const out=[];
   const add=(lat,lng,why,score)=>{
     if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;
-    const p={lat:+lat,lng:+lng,why,score:Number(score)||0};
+    const p={lat:+lat,lng:+lng,why,score:Number(score)||0};if(!insideWater(f,p))return;
     if(!out.some(x=>Math.abs(x.lat-p.lat)<.00001&&Math.abs(x.lng-p.lng)<.00001))out.push(p);
   };
   const ht=f?.hist?.heroTransition;

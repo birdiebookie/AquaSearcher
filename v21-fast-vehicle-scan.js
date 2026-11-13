@@ -7,25 +7,45 @@
 'use strict';
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 function hav(a,b){const R=3958.7613,p=a.lat*Math.PI/180,q=b.lat*Math.PI/180,dl=(b.lat-a.lat)*Math.PI/180,dg=(b.lng-a.lng)*Math.PI/180,h=Math.sin(dl/2)**2+Math.cos(p)*Math.cos(q)*Math.sin(dg/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
+function insideWater(f,p){
+ const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
+ let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+ for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+  const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+  if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+  const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+  const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+  nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+ }
+ return inside&&nearest>=5;
+}
 function tileUrl(r,lat,lng,z=18){const n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;return(r.itemURL||'').replace('{level}',z).replace('{row}',Math.floor(y)).replace('{col}',Math.floor(x))}
 function load(url){return new Promise((ok,no)=>{const i=new Image(),tm=setTimeout(()=>{i.src='';no(Error('tile timeout'))},5000);i.crossOrigin='anonymous';i.onload=()=>{clearTimeout(tm);ok(i)};i.onerror=()=>{clearTimeout(tm);no(Error('tile failed'))};i.src=url})}
 async function mosaic(r,lat,lng){
  const z=18,n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n,cx=Math.floor(x),cy=Math.floor(y);
- const c=document.createElement('canvas');c.width=768;c.height=768;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
+ const c=document.createElement('canvas');c.width=768;c.height=768;c.__aquaOrigin={x:(x-cx)*256+256,y:(y-cy)*256+256};const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
  const jobs=[];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=cy+dy;if(yy<0||yy>=n)continue;const xx=((cx+dx)%n+n)%n,url=(r.itemURL||'').replace('{level}',z).replace('{row}',yy).replace('{col}',xx);jobs.push(load(url).then(im=>({im,dx,dy})).catch(()=>null))}
  const got=(await Promise.all(jobs)).filter(Boolean);if(!got.length)throw Error('No imagery tiles loaded');
  for(const q of got)ctx.drawImage(q.im,(q.dx+1)*256,(q.dy+1)*256,256,256);
  return c;
 }
 function crops(src){
- const out=[src];
+ const out=[src];src.__aquaOffset={x:0,y:0};src.__aquaScale=1;
  for(const size of [512,384]){
    const c=document.createElement('canvas');c.width=512;c.height=512;
-   c.__aquaSourceSize=size;c.getContext('2d').drawImage(src,384-size/2,384-size/2,size,size,0,0,512,512);out.push(c);
+   c.__aquaSourceSize=size;c.__aquaScale=size/512;c.__aquaOffset={x:384-size/2,y:384-size/2};
+   c.getContext('2d').drawImage(src,384-size/2,384-size/2,size,size,0,0,512,512);out.push(c);
  }
  return out;
 }
-function sizeFt(d,lat,src){const px=Math.max(d.bbox?.[2]||0,d.bbox?.[3]||0),mpp=(156543.03392*Math.cos(lat*Math.PI/180)/(2**18))*(src/512);return px*mpp*3.28084}
+function detectionFootprint(c,d,p){
+ const [x,y,w,h]=d.bbox||[0,0,0,0],corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+ if(corners.some(([a,b])=>a<0||b<0||a>c.width||b>c.height))return null;
+ const origin=c.__aquaOrigin||{x:384,y:384},off=c.__aquaOffset||{x:0,y:0},scale=c.__aquaScale||1,n=2**18,mpp=156543.03392*Math.cos(p.lat*Math.PI/180)/n;
+ const toLL=(a,b)=>{const X=origin.x+off.x+a*scale,Y=origin.y+off.y+b*scale;return{lat:p.lat+(origin.y-Y)*mpp/111320,lng:p.lng+(X-origin.x)*mpp/(111320*Math.max(.15,Math.cos(p.lat*Math.PI/180)))}};
+ return corners.map(([a,b])=>toLL(a,b));
+}
+function sizeFt(d,lat,c){const px=Math.max(d.bbox?.[2]||0,d.bbox?.[3]||0),scale=c.__aquaScale||1,mpp=156543.03392*Math.cos(lat*Math.PI/180)/(2**18);return px*scale*mpp*3.28084}
 function releasesFor(rs,f){
  const s=rs.slice().sort((a,b)=>+a.releaseDatetime-+b.releaseDatetime),want=[];
  const add=r=>{if(r&&!want.includes(r))want.push(r)};
@@ -36,7 +56,8 @@ function releasesFor(rs,f){
  return want.slice(0,f?.isPinTest?8:6);
 }
 function targets(f){
- const out=[],add=(lat,lng,score,why)=>{if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;const p={lat:+lat,lng:+lng,score:+score||0,why:why||'target'};if(!out.some(x=>hav(x,p)<0.003))out.push(p)};
+ if(!f?.waterBoundaryGeometry?.rings?.length||f.waterBoundaryIsFlowline)return[];
+ const out=[],add=(lat,lng,score,why)=>{if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;const p={lat:+lat,lng:+lng,score:+score||0,why:why||'target'};if(!insideWater(f,p))return;if(!out.some(x=>hav(x,p)<0.003))out.push(p)};
  add(f?.lat,f?.lng,100,f?.isPinTest?'exact supplied coordinate':'water-feature center');
  for(const c of (f?.hist?.comparisons||[]).slice().sort((a,b)=>(b.heroScore||0)-(a.heroScore||0))){if((c.heroScore||0)>=55||(c.localized||0)>=55)add(c.lat,c.lng,c.heroScore||c.score,'historical target');if(out.length>=3)break}
  return out.slice(0,3);
@@ -55,8 +76,9 @@ async function install(){
        for(const c of crops(m)){
          const ds=await model.detect(c,20,.08);
          for(const d of ds)if(['car','truck','boat','bus','motorcycle'].includes(d.class)){
-           const ft=sizeFt(d,p.lat,c.__aquaSourceSize||768);
-           if(ft>=8)hits.push({label:d.class,confidence:d.score,year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,highResolution:true,historicalTarget:p.score<100,targetScore:p.score,targetReason:p.why});
+           const footprint=detectionFootprint(c,d,p);if(!footprint||!footprint.every(q=>insideWater(f,q)))continue;
+           const ft=sizeFt(d,p.lat,c),center=footprint.reduce((a,q)=>({lat:a.lat+q.lat/4,lng:a.lng+q.lng/4}),{lat:0,lng:0});
+           if(ft>=8)hits.push({label:d.class,confidence:d.score,year:r.date,lat:center.lat,lng:center.lng,footprint,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,highResolution:true,historicalTarget:p.score<100,targetScore:p.score,targetReason:p.why});
          }
        }
      }catch(e){}

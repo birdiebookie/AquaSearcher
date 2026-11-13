@@ -64,7 +64,7 @@ async function image(url){
 }
 async function mosaic(rel,p){
   const z=19,n=2**z,x=(p.lng+180)/360*n,y=(1-Math.asinh(Math.tan(p.lat*Math.PI/180))/Math.PI)/2*n;
-  const tx=Math.floor(x),ty=Math.floor(y),c=document.createElement('canvas');c.width=768;c.height=768;
+  const tx=Math.floor(x),ty=Math.floor(y),c=document.createElement('canvas');c.width=768;c.height=768;c.__aquaOrigin={x:(x-tx)*256+256,y:(y-ty)*256+256};
   const ctx=c.getContext('2d');
   let good=0;
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
@@ -105,19 +105,25 @@ function localObjectness(src){
   }
   return Math.round(Math.min(100,(edge/n*.65+contrast/n*.35)*100));
 }
-async function detectCanvas(src,lat,lng){
+async function detectCanvas(src,lat,lng,metersPerPixelOverride){
   if(typeof cocoSsd==='undefined')return[];
   try{
     if(!window.__aquaP3Coco)window.__aquaP3Coco=await cocoSsd.load({base:'mobilenet_v2'});
-    const views=[src,centerCrop(src,384,384,384,384),centerCrop(src,384,384,256,256)];
+    const views=[
+      {canvas:src,scale:1,map:(x,y)=>({x,y})},
+      {canvas:centerCrop(src,384,384,384,384),scale:.75,map:(x,y)=>({x:192+x*.75,y:192+y*.75})},
+      {canvas:centerCrop(src,384,384,256,256),scale:.5,map:(x,y)=>({x:256+x*.5,y:256+y*.5})}
+    ];
+    const mpp=Number(metersPerPixelOverride)||156543.03392*Math.cos(lat*Math.PI/180)/(2**19);
+    const origin=src.__aquaOrigin||{x:384,y:384};const toLL=(x,y)=>({lat:lat+(origin.y-y)*mpp/111320,lng:lng+(x-origin.x)*mpp/(111320*Math.max(.15,Math.cos(lat*Math.PI/180)))});
     const out=[];
-    for(const v of views){
-      const ds=await window.__aquaP3Coco.detect(v,25,.12);
+    for(const view of views){
+      const ds=await window.__aquaP3Coco.detect(view.canvas,25,.12);
       for(const o of ds.filter(x=>['car','truck','boat','bus','motorcycle'].includes(x.class))){
-        const px=Math.max(o.bbox?.[2]||0,o.bbox?.[3]||0);
-        const mPerPx=(156543.03392*Math.cos(lat*Math.PI/180)/(2**19))*(v===src?1:384/512);
-        const ft=px*mPerPx*3.28084;
-        out.push({label:o.class,confidence:o.score,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=8,lat,lng});
+        const [bx,by,bw,bh]=o.bbox||[0,0,0,0],cx=bx+bw/2,cy=by+bh/2;
+        const center=view.map(cx,cy),corners=[[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx,by+bh]].map(([x,y])=>{const q=view.map(x,y);return toLL(q.x,q.y)});
+        const ll=toLL(center.x,center.y),ft=Math.max(bw,bh)*view.scale*mpp*3.28084;
+        out.push({label:o.class,confidence:o.score,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=8,lat:ll.lat,lng:ll.lng,footprint:corners});
       }
     }
     return out;
@@ -125,20 +131,43 @@ async function detectCanvas(src,lat,lng){
 }
 async function rowNAIP(p){
   try{
-    const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng);
+    const n=await naipPlusImage(p),nh=await detectCanvas(n,p.lat,p.lng,230/768),water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline),safeNh=nh.filter(h=>h.footprint?.length===4&&water.some(f=>h.footprint.every(q=>insideWaterFeature(f,q))));
     const key=p.lat.toFixed(5)+','+p.lng.toFixed(5),r=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
-    r.naipHits.push(...nh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
+    r.naipHits.push(...safeNh.map(h=>({...h,source:'USGS NAIP Plus'})));r.naipObjectness.push(localObjectness(n));records.set(key,r);
   }catch(e){/* NAIP Plus is supplemental; never block the historical scan */}
 }
+function insideWaterFeature(f,p){
+  if(!f||f.waterBoundaryIsFlowline)return false;
+  const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
+  if(window.__aquaWaterSafetyHealthy!==true||!rings.length)return false;
+  let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+  for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+    if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+    const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+    nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+  }
+  return inside&&nearest>=5;
+}
 function candidatePoints(){
+  // Never scan the search pin, ramps, docks, or other access coordinates as target points.
+  // Every scan point is clipped to an already accepted waterbody polygon.
+  const water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline&&Array.isArray(f.waterBoundaryGeometry?.rings));
   const out=[];
-  if(window.__aquaPinTest)out.push(point(window.__aquaPinTest.lat,window.__aquaPinTest.lng));
-  const pin=window.pin?.getLatLng?.();if(pin)out.push(point(pin.lat,pin.lng));
-  for(const a of window.aquaV16Access||[])out.push(point(a.lat,a.lng));
-  for(const f of window.__aquaFindings||[])if(!f.isPinTest&&!f.accessPoint)out.push(point(f.lat,f.lng));
-  const base=uniquePts(out),expanded=[];
-  for(const p of base.slice(0,24))expanded.push(...around(p,0),...around(p,12),...around(p,28));
-  return uniquePts(expanded).slice(0,96);
+  const pin=window.pin?.getLatLng?.();
+  if(pin&&water.some(f=>insideWaterFeature(f,pin)))out.push(point(pin.lat,pin.lng));
+  for(const f of water.slice(0,24)){
+    const center=point(f.lat,f.lng);
+    if(center&&insideWaterFeature(f,center))out.push(center);
+    if(!center)continue;
+    for(const radius of [12,28]){
+      for(const p of around(center,radius)){
+        if(insideWaterFeature(f,p))out.push(p);
+      }
+    }
+  }
+  return uniquePts(out).slice(0,96);
 }
 async function run(manual){
   if(P3.running)return;
@@ -156,11 +185,11 @@ async function run(manual){
         const p=pts[pi];
         if($('scan'))$('scan').textContent='Phase 3 target search: '+rel.date+' · point '+(pi+1)+'/'+pts.length;
         try{
-          const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),obj=localObjectness(m);
+          const m=await mosaic(rel,p),hits=await detectCanvas(m,p.lat,p.lng),water=(window.__aquaFindings||[]).filter(f=>!f.isPinTest&&!f.accessPoint&&!f.waterBoundaryIsFlowline),safeHits=hits.filter(h=>h.footprint?.length===4&&water.some(f=>h.footprint.every(q=>insideWaterFeature(f,q)))),obj=localObjectness(m);
           if(ri===0)await rowNAIP(p);
           const key=p.lat.toFixed(5)+','+p.lng.toFixed(5);
           const row=records.get(key)||{lat:p.lat,lng:p.lng,years:[],hits:[],changes:[],objectness:[],naipHits:[],naipObjectness:[]};
-          row.years.push(rel.date);row.hits.push(...hits);row.objectness.push(obj);
+          row.years.push(rel.date);row.hits.push(...safeHits);row.objectness.push(obj);
           records.set(key,row);
         }catch(e){}
         await sleep(2);

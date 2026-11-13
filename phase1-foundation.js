@@ -49,7 +49,8 @@ function usableWater(f){
  // Keep every real mapped pond at least 25 ft across. Width is now measured
  // perpendicular to the polygon's orientation, so diagonal ponds are not
  // accidentally discarded by an axis-aligned bounding box.
- if(Number.isFinite(f.waterWidthFt)&&f.waterWidthFt<25)return false;
+ if(!Number.isFinite(f.waterWidthFt)||f.waterWidthFt<40)return false;
+  if(!Number.isFinite(f.waterLengthFt)||f.waterLengthFt<40)return false;
  const rawName=String(f._osmTags?.name||f.name||'').trim();
  const realName=!!rawName&&!/^(unnamed|unknown|river)$/i.test(rawName);
  const minor=/^stream$|^canal$|^ditch$|^drain$/.test(type)||f._flowline||/^river$/.test(String(f._osmTags?.waterway||'').toLowerCase());
@@ -165,56 +166,22 @@ function normalizeAccessList(list){
  }).filter(x=>x&&Number.isFinite(x.lat)&&Number.isFinite(x.lng));
 }
 async function verifyMappedWaterBoundary(f){
- // First verify against the exact mapped feature geometry used to create this
- // candidate. This includes OSM ponds that are absent from the USGS 3DHP layer.
- const g=f.waterBoundaryGeometry||{};
- const rings=(g.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
- if(rings.length&&!f.waterBoundaryIsFlowline){
-  let inside=false;
+  // Target coordinates must be inside the source waterbody polygon itself.
+  // Flowlines and proximity buffers are never accepted as proof of underwater location.
+  if(window.__aquaWaterSafetyHealthy!==true||!f||f.waterBoundaryIsFlowline)return {status:'NOT_VERIFIED',source:'flowline is not a waterbody boundary'};
+  const rings=(f.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);
+  if(!rings.length)return {status:'NOT_VERIFIED',source:'no waterbody polygon geometry'};
+  let inside=false,nearest=Infinity;const sx=111320*Math.cos(f.lat*Math.PI/180),sy=111320;
   for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-   const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
-   if((yi>f.lat)!==(yj>f.lat)&&f.lng<(xj-xi)*(f.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+    if((yi>f.lat)!==(yj>f.lat)&&f.lng<(xj-xi)*(f.lat-yi)/(yj-yi)+xi)inside=!inside;
+    const ax=(xi-f.lng)*sx,ay=(yi-f.lat)*sy,bx=(xj-f.lng)*sx,by=(yj-f.lat)*sy,dx=bx-ax,dy=by-ay;
+    const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+    nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
   }
-  if(inside)return {status:'VERIFIED_WATER',source:'source waterbody polygon (USGS/OSM)'};
- }
- const paths=(g.paths||[]).filter(p=>Array.isArray(p)&&p.length>1);
- if(f.waterBoundaryIsFlowline&&paths.length){
-  const latScale=111320,lngScale=111320*Math.cos(f.lat*Math.PI/180);
-  let nearest=Infinity;
-  for(const path of paths)for(let i=1;i<path.length;i++){
-   const a=path[i-1],b=path[i],px=(f.lng-a[0])*lngScale,py=(f.lat-a[1])*latScale;
-   const dx=(b[0]-a[0])*lngScale,dy=(b[1]-a[1])*latScale;
-   const t=Math.max(0,Math.min(1,(px*dx+py*dy)/(dx*dx+dy*dy||1)));
-   nearest=Math.min(nearest,Math.hypot(px-t*dx,py-t*dy));
-  }
-  if(nearest<=5)return {status:'VERIFIED_WATER',source:'source mapped waterway flowline'};
- }
- // If the source geometry cannot confirm the exact point, ask the authoritative
- // national hydrography service. No match remains fail-closed.
- const bases=[
-  'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/60/query',
-  'https://3dhp.nationalmap.gov/arcgis/rest/services/usgs_3dhp_all/FeatureServer/50/query'
- ];
- for(let i=0;i<bases.length;i++){
-  try{
-   const p=new URLSearchParams({
-    where:'1=1',
-    geometry:String(f.lng)+','+String(f.lat),
-    geometryType:'esriGeometryPoint',
-    inSR:'4326',
-    spatialRel:'esriSpatialRelIntersects',
-    distance:i===0?'1':'5',
-    units:'esriSRUnit_Meter',
-    returnCountOnly:'true',
-    f:'json'
-   });
-   const res=await fetch(bases[i]+'?'+p.toString(),{signal:AbortSignal.timeout(10000),cache:'no-store'});
-   if(!res.ok)continue;
-   const j=await res.json();
-   if(Number(j.count)>0)return {status:'VERIFIED_WATER',source:i===0?'USGS 3DHP waterbody':'USGS 3DHP flowline'};
-  }catch(e){console.warn('Water-boundary check unavailable',e)}
- }
- return {status:'NOT_VERIFIED',source:'USGS 3DHP point-intersection check'};
+  return inside&&nearest>=5
+    ? {status:'VERIFIED_WATER',source:'exact source waterbody polygon containment with 5m shoreline clearance'}
+    : {status:'NOT_VERIFIED',source:inside?'within 5m of shoreline':'coordinate is outside source waterbody polygon'};
 }
 async function enforceWaterBoundaries(){
  const arr=window.__aquaFindings;

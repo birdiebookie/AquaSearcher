@@ -8,18 +8,36 @@
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function wait(ms){return new Promise(r=>setTimeout(r,ms))}
 function hav(a,b){const R=3958.7613,p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dl=(b.lat-a.lat)*Math.PI/180,dg=(b.lng-a.lng)*Math.PI/180,h=Math.sin(dl/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dg/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
+function insideWater(f,p){
+ const rings=(f?.waterBoundaryGeometry?.rings||[]).filter(r=>Array.isArray(r)&&r.length>2);if(window.__aquaWaterSafetyHealthy!==true||!rings.length||f.waterBoundaryIsFlowline)return false;
+ let inside=false,nearest=Infinity;const sx=111320*Math.cos(p.lat*Math.PI/180),sy=111320;
+ for(const ring of rings)for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+  const yi=+ring[i][1],xi=+ring[i][0],yj=+ring[j][1],xj=+ring[j][0];
+  if((yi>p.lat)!==(yj>p.lat)&&p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi)inside=!inside;
+  const ax=(xi-p.lng)*sx,ay=(yi-p.lat)*sy,bx=(xj-p.lng)*sx,by=(yj-p.lat)*sy,dx=bx-ax,dy=by-ay;
+  const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy||1)));
+  nearest=Math.min(nearest,Math.hypot(ax+t*dx,ay+t*dy));
+ }
+ return inside&&nearest>=5;
+}
+function footprintAt(m,p,box){
+ const origin=m.__aquaOrigin||{x:384,y:384},z=m.__aquaZoom||18,mpp=156543.03392*Math.cos(p.lat*Math.PI/180)/(2**z);
+ const toLL=(x,y)=>({lat:p.lat+(origin.y-y)*mpp/111320,lng:p.lng+(x-origin.x)*mpp/(111320*Math.max(.15,Math.cos(p.lat*Math.PI/180)))});
+ return [[box.x0,box.y0],[box.x1,box.y0],[box.x1,box.y1],[box.x0,box.y1]].map(([x,y])=>toLL(x,y));
+}
 function addPt(out,lat,lng,score,why){if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;const p={lat:+lat,lng:+lng,score:+score||0,why:why||'target'};if(!out.some(x=>hav(x,p)<0.003))out.push(p)}
 function targets(f){
- const out=[];
- addPt(out,f?.lat,f?.lng,100,f?.isPinTest?'exact supplied coordinate':'water-feature center');
+ if(!f?.waterBoundaryGeometry?.rings?.length||f.waterBoundaryIsFlowline)return[];
+ const out=[],add=(lat,lng,score,why)=>{if(!Number.isFinite(+lat)||!Number.isFinite(+lng))return;const p={lat:+lat,lng:+lng};if(!insideWater(f,p))return;addPt(out,lat,lng,score,why)};
+ add(f?.lat,f?.lng,100,f?.isPinTest?'exact supplied coordinate':'water-feature center');
  for(const c of (f?.hist?.comparisons||[]).slice().sort((a,b)=>(b.heroScore||0)-(a.heroScore||0))){
-   if((c.heroScore||0)>=45||(c.localized||0)>=45)addPt(out,c.lat,c.lng,c.heroScore||c.score,'historical anomaly');
+   if((c.heroScore||0)>=45||(c.localized||0)>=45)add(c.lat,c.lng,c.heroScore||c.score,'historical anomaly');
    if(out.length>=5)break;
  }
  if(f?.isPinTest){
    const ft=.3048/111320,lonFt=ft/Math.max(.15,Math.cos(f.lat*Math.PI/180));
    for(const [n,e] of [[25,0],[-25,0],[0,25],[0,-25],[50,0],[-50,0],[0,50],[0,-50],[75,0],[-75,0],[0,75],[0,-75]])
-     addPt(out,f.lat+n*ft,f.lng+e*lonFt,90,'exact-pin search ring');
+     add(f.lat+n*ft,f.lng+e*lonFt,90,'exact-pin search ring');
  }
  return out.slice(0,f?.isPinTest?13:5);
 }
@@ -32,7 +50,7 @@ async function mosaic(r,lat,lng){
  for(const z of [20,19,18]){
    try{
      const n=2**z,x=(lng+180)/360*n,y=(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n,cx=Math.floor(x),cy=Math.floor(y);
-     const c=document.createElement('canvas');c.width=768;c.height=768;const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
+     const c=document.createElement('canvas');c.width=768;c.height=768;c.__aquaOrigin={x:(x-cx)*256+256,y:(y-cy)*256+256};const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
      let got=0;
      const jobs=[];
      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
@@ -64,7 +82,7 @@ function brightWaterAnomaly(src){
    const ww=maxx-minx+1,hh=maxy-miny+1,area=ww*hh,ratio=ww/Math.max(1,hh);
    if(n>=12&&area>=120&&area<=3000&&ratio>=1.2&&ratio<=5.5){
      const score=Math.min(100,Math.round(25+n*2.2+Math.min(30,area/60)));
-     if(!best||score>best.score)best={score,x,y,width:ww,height:hh,pixels:n,zoom:src.__aquaZoom||18};
+     if(!best||score>best.score)best={score,x:(minx+maxx)/2,y:(miny+maxy)/2,x0:minx,y0:miny,x1:maxx,y1:maxy,width:ww,height:hh,pixels:n,zoom:src.__aquaZoom||18};
    }
  }
  return best;
@@ -82,8 +100,12 @@ async function install(){
        if(window.paused)while(window.paused)await sleep(150);
        const m=await mosaic(r,p.lat,p.lng),a=brightWaterAnomaly(m);
        if(a){
-         visual.push({...a,year:r.date,lat:p.lat,lng:p.lng,targetReason:p.why});
-         hits.push({label:'visual anomaly',confidence:Math.min(.95,a.score/100),year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round((a.width*(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**a.zoom))*3.28084)*10)/10,sizeQualified:a.width*(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**a.zoom))*3.28084>=15,highResolution:true,visualAnomaly:true,targetReason:p.why,zoom:a.zoom});
+         const footprint=footprintAt(m,p,{x0:a.x0,y0:a.y0,x1:a.x1,y1:a.y1});
+         if(footprint.every(q=>insideWater(f,q))){
+           const center=footprint.reduce((v,q)=>({lat:v.lat+q.lat/4,lng:v.lng+q.lng/4}),{lat:0,lng:0}),mpp=156543.03392*Math.cos(p.lat*Math.PI/180)/(2**a.zoom),sizeFt=Math.max(a.width,a.height)*mpp*3.28084;
+           visual.push({...a,year:r.date,lat:center.lat,lng:center.lng,footprint,targetReason:p.why});
+           hits.push({label:'visual anomaly',confidence:Math.min(.95,a.score/100),year:r.date,lat:center.lat,lng:center.lng,footprint,estimatedSizeFt:Math.round(sizeFt*10)/10,sizeQualified:sizeFt>=15,highResolution:true,visualAnomaly:true,targetReason:p.why,zoom:a.zoom});
+         }
        }
        // COCO remains secondary evidence, not the gatekeeper.
        if(typeof cocoSsd!=='undefined'){
@@ -91,8 +113,10 @@ async function install(){
          for(const c of [m]){
            const ds=await window.__aquaV22Model.detect(c,20,.08);
            for(const d of ds)if(['car','truck','boat','bus','motorcycle'].includes(d.class)){
-             const px=Math.max(d.bbox?.[2]||0,d.bbox?.[3]||0),mpp=(156543.03392*Math.cos(p.lat*Math.PI/180)/(2**(m.__aquaZoom||18))),ft=px*mpp*3.28084;
-             if(ft>=6)hits.push({label:d.class,confidence:d.score,year:r.date,lat:p.lat,lng:p.lng,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,highResolution:true,targetReason:p.why,zoom:m.__aquaZoom});
+             const [bx,by,bw,bh]=d.bbox||[0,0,0,0],footprint=footprintAt(m,p,{x0:bx,y0:by,x1:bx+bw,y1:by+bh});
+             if(!footprint.every(q=>insideWater(f,q)))continue;
+             const center=footprint.reduce((v,q)=>({lat:v.lat+q.lat/4,lng:v.lng+q.lng/4}),{lat:0,lng:0}),mpp=(156543.03392*Math.cos(center.lat*Math.PI/180)/(2**(m.__aquaZoom||18))),ft=Math.max(bw,bh)*mpp*3.28084;
+             if(ft>=6)hits.push({label:d.class,confidence:d.score,year:r.date,lat:center.lat,lng:center.lng,footprint,estimatedSizeFt:Math.round(ft*10)/10,sizeQualified:ft>=15,highResolution:true,targetReason:p.why,zoom:m.__aquaZoom});
            }
          }
        }
